@@ -102,7 +102,7 @@ enum Demo {
         let saturday = calendar.date(byAdding: .day, value: 8, to: friday)!
         func entry(_ title: String, _ category: String, kind: String = "task", date: Date? = nil, time: String = "",
                    flagged: Bool = false, repeatType: String = "none", repeatDay: Int = 0, notes: String = "") -> SortedDump.Entry {
-            SortedDump.Entry(title: title, category: category, kind: kind, date: date.map(iso.string) ?? "", time: time,
+            SortedDump.Entry(title: title, category: category, kind: kind, date: date.map { iso.string(from: $0) } ?? "", time: time,
                              endDate: "", endTime: "", location: "", reference: "", notes: notes, flagged: flagged,
                              repeatType: repeatType, repeatHours: 0, repeatWeekdays: [], repeatDay: repeatDay)
         }

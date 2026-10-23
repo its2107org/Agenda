@@ -309,7 +309,7 @@ enum Sorter {
         for separator in separators {
             pieces = pieces.flatMap { $0.components(separatedBy: separator) }
         }
-        return pieces.compactMap { piece in
+        return pieces.compactMap { piece -> Proposal? in
             var item = QuickParse.item(from: piece, categories: categories, now: now)
             guard let parsed = item, parsed.title.count > 1 else { return nil }
             item?.source = source
