@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Dates in plain words
 
-enum When {
+enum DateWords {
     /// "3:00 pm", "Tomorrow", "Tomorrow 3:00 pm", "Fri 31 Oct", "Fri 31 Oct, 3:00 pm".
     static func short(_ date: Date, hasTime: Bool, now: Date = Date()) -> String {
         let calendar = Calendar.current
@@ -127,7 +127,7 @@ struct ItemRow: View {
 
     private func detailLine(category: Category) -> String {
         var parts: [String] = []
-        if showDate, let when = When.range(item) { parts.append(when) }
+        if showDate, let when = DateWords.range(item) { parts.append(when) }
         if !item.location.isEmpty { parts.append(item.location) }
         if showCategory { parts.append(category.name) }
         if parts.isEmpty, !item.notes.isEmpty { parts.append(item.notes) }
@@ -158,9 +158,9 @@ struct PhoneEventRow: View {
     private var details: String {
         var parts: [String] = []
         if event.allDay {
-            parts.append(showDay ? When.short(event.start, hasTime: false) : "All day")
+            parts.append(showDay ? DateWords.short(event.start, hasTime: false) : "All day")
         } else {
-            let start = showDay ? When.short(event.start, hasTime: true) : event.start.formatted(date: .omitted, time: .shortened)
+            let start = showDay ? DateWords.short(event.start, hasTime: true) : event.start.formatted(date: .omitted, time: .shortened)
             parts.append("\(start) – \(event.end.formatted(date: .omitted, time: .shortened))")
         }
         if !event.location.isEmpty { parts.append(event.location) }
@@ -227,9 +227,9 @@ struct RoutineRow: View {
     private var statusLine: String {
         if routine.isPaused { return "Paused" }
         if routine.isDue() {
-            return "Due \(When.short(routine.nextDue, hasTime: true).lowercasedFirst)"
+            return "Due \(DateWords.short(routine.nextDue, hasTime: true).lowercasedFirst)"
         }
-        var text = When.short(routine.nextDue, hasTime: true)
+        var text = DateWords.short(routine.nextDue, hasTime: true)
         if compact { return text }
         text += " · \(routine.schedule.summary)"
         return text

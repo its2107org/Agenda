@@ -160,7 +160,7 @@ struct ProposalRow: View {
                     Chip(text: category.name, symbol: category.symbol, tint: category.tint)
                     if let repeats = proposal.repeats {
                         Chip(text: repeats.summary, symbol: "repeat", tint: .secondary)
-                    } else if let when = When.range(proposal.item) {
+                    } else if let when = DateWords.range(proposal.item) {
                         Chip(text: when, symbol: proposal.item.isEvent ? "calendar" : "clock", tint: .secondary)
                     }
                     if proposal.item.flagged {

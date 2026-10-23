@@ -23,7 +23,7 @@ struct AddToDoIntent: AppIntent {
         store.add([item])
         let category = store.category(item.categoryID).name
         if let due = item.due {
-            return .result(dialog: "Added \(item.title) to \(category), \(When.short(due, hasTime: item.hasTime).lowercasedFirst).")
+            return .result(dialog: "Added \(item.title) to \(category), \(DateWords.short(due, hasTime: item.hasTime).lowercasedFirst).")
         }
         return .result(dialog: "Added \(item.title) to \(category).")
     }

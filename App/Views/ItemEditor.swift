@@ -179,7 +179,7 @@ struct ItemEditor: View {
         case .siri: how = "with Siri"
         case .typed: how = ""
         }
-        return "Added \(When.short(item.created, hasTime: false).lowercasedFirst) \(how)".trimmingCharacters(in: .whitespaces)
+        return "Added \(DateWords.short(item.created, hasTime: false).lowercasedFirst) \(how)".trimmingCharacters(in: .whitespaces)
     }
 
     private func save() {

@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Pretend to-dos for screenshots (started with -AgendaDemo). Nothing is saved.

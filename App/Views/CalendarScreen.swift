@@ -70,7 +70,7 @@ struct CalendarScreen: View {
                 }
             }
         } header: {
-            SectionTitle(text: When.dayHeading(selected))
+            SectionTitle(text: DateWords.dayHeading(selected))
         }
     }
 

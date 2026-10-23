@@ -145,7 +145,7 @@ enum SelfTest {
         check("shared item round trip", dropBack?.text == drop.text)
 
         // 7. Words.
-        check("when: today with time", When.short(Date().addingTimeInterval(60), hasTime: false) == "Today")
+        check("when: today with time", DateWords.short(Date().addingTimeInterval(60), hasTime: false) == "Today")
         check("ordinals", RoutineSchedule.ordinal(1) == "1st" && RoutineSchedule.ordinal(22) == "22nd"
               && RoutineSchedule.ordinal(13) == "13th")
 
