@@ -1,0 +1,147 @@
+name: Agenda
+options:
+  deploymentTarget:
+    iOS: "26.1"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    # Replaced with the real Apple Team ID when building for TestFlight.
+    DEVELOPMENT_TEAM: AGENDADEV0
+    AGENDA_BUNDLE_ID: com.$(DEVELOPMENT_TEAM).agenda
+    AGENDA_KEYCHAIN_GROUP: $(AppIdentifierPrefix)com.$(DEVELOPMENT_TEAM).agenda.shared
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGN_STYLE: Manual
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+targets:
+  Agenda:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Shared/Core
+      - path: Shared/Intents
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Agenda
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
+        LSApplicationCategoryType: public.app-category.productivity
+        AgendaKeychainGroup: $(AGENDA_KEYCHAIN_GROUP)
+        NSMicrophoneUsageDescription: Agenda listens while you talk through what's on your mind, then turns it into to-dos. Nothing is recorded or kept.
+        NSSpeechRecognitionUsageDescription: Agenda turns what you say into text on this phone.
+        NSAlarmKitUsageDescription: Agenda rings like an alarm for important reminders, even when your phone is on silent.
+        NSCalendarsFullAccessUsageDescription: Agenda shows your calendar alongside your to-dos, and can add bookings you share with it.
+        NSCalendarsWriteOnlyAccessUsageDescription: Agenda adds bookings you share with it to your calendar.
+        NSSupportsLiveActivities: true
+        UIBackgroundModes:
+          - fetch
+        BGTaskSchedulerPermittedIdentifiers:
+          - agenda.refresh
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        CFBundleURLTypes:
+          - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
+            CFBundleURLSchemes:
+              - agenda
+    entitlements:
+      path: App/Agenda.entitlements
+      properties:
+        keychain-access-groups:
+          - $(AGENDA_KEYCHAIN_GROUP)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(AGENDA_BUNDLE_ID)
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) AGENDA_APP
+    dependencies:
+      - target: AgendaWidget
+        embed: true
+        codeSign: true
+      - target: AgendaShare
+        embed: true
+        codeSign: true
+
+  AgendaWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widget
+      - path: Shared/Core
+      - path: Shared/Intents
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Agenda
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        AgendaKeychainGroup: $(AGENDA_KEYCHAIN_GROUP)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Widget/AgendaWidget.entitlements
+      properties:
+        keychain-access-groups:
+          - $(AGENDA_KEYCHAIN_GROUP)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(AGENDA_BUNDLE_ID).Widget
+        TARGETED_DEVICE_FAMILY: "1"
+        APPLICATION_EXTENSION_API_ONLY: YES
+
+  AgendaShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Share
+      - path: Shared/Core
+    info:
+      path: Share/Info.plist
+      properties:
+        CFBundleDisplayName: Agenda
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        AgendaKeychainGroup: $(AGENDA_KEYCHAIN_GROUP)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsImageWithMaxCount: 3
+              NSExtensionActivationSupportsFileWithMaxCount: 1
+    entitlements:
+      path: Share/AgendaShare.entitlements
+      properties:
+        keychain-access-groups:
+          - $(AGENDA_KEYCHAIN_GROUP)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(AGENDA_BUNDLE_ID).Share
+        TARGETED_DEVICE_FAMILY: "1"
+        APPLICATION_EXTENSION_API_ONLY: YES
+
+schemes:
+  Agenda:
+    build:
+      targets:
+        Agenda: all
+    run:
+      config: Debug
+    archive:
+      config: Release

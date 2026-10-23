@@ -1,0 +1,51 @@
+name: 3. Build Agenda
+run-name: Build Agenda (${{ github.ref_name }})
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "scripts/**", ".github/workflows/ci.yml"]
+  schedule:
+    # Rebuild on the 1st of every month so the TestFlight copy never expires (they last 90 days).
+    - cron: "29 5 1 * *"
+
+jobs:
+  build:
+    name: Build and send to TestFlight
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select Xcode
+        run: sudo xcode-select --switch /Applications/Xcode_26.5.app/Contents/Developer
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Install fastlane
+        run: bundle install
+      - name: Sync clock
+        run: sudo sntp -sS time.windows.com || true
+      - name: Build
+        run: bundle exec fastlane build_agenda
+        env:
+          TEAMID: ${{ secrets.TEAMID }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+          FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+          FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      - name: Send to TestFlight
+        run: bundle exec fastlane release
+        env:
+          TEAMID: ${{ secrets.TEAMID }}
+          FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+          FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+          FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+      - name: Keep the build log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: build-log
+          path: |
+            buildlog
+            *.ipa
