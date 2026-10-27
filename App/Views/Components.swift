@@ -130,6 +130,7 @@ struct ItemRow: View {
         if showDate, let when = DateWords.range(item) { parts.append(when) }
         if !item.location.isEmpty { parts.append(item.location) }
         if showCategory { parts.append(category.name) }
+        parts += item.tagList.map { "#\($0)" }
         if parts.isEmpty, !item.notes.isEmpty { parts.append(item.notes) }
         return parts.joined(separator: " · ")
     }

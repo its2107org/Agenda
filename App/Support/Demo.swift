@@ -23,6 +23,9 @@ enum Demo {
             router.proposals = Sorter.proposals(from: sampleDump(), categories: Category.defaults, source: .voice)
             router.sheet = .review
         }
+        if flag("Toast"), let memo = AgendaStore.shared.data.items.first(where: { $0.title.hasPrefix("Send Q3") }) {
+            router.showAdded(memo)
+        }
         if flag("Booking"), let dinner = AgendaStore.shared.data.items.first(where: { $0.title.hasPrefix("Dinner") }) {
             router.sheet = .item(dinner.id)
         }
@@ -55,8 +58,8 @@ enum Demo {
         }
         data.items = [
             task("Return the Zara jacket", "errands", at(-1)),
-            task("Reply to Hannah about the wedding", "social", at(-2)),
-            task("Send Q3 memo to Tom", "work", at(0, 11), time: true, flagged: true),
+            { var i = task("Reply to Hannah about the wedding", "social", at(-2)); i.tagList = ["Hannah", "Wedding"]; return i }(),
+            { var i = task("Send Q3 memo to Tom", "work", at(0, 11), time: true, flagged: true); i.tagList = ["Tom"]; return i }(),
             event("Dinner at Via Carota", "social", at(0, 19, 30), hours: 2, place: "51 Grove St", ref: "VC-4821"),
             task("Book dentist check-up", "health", at(0)),
             task("Pick up dry cleaning", "errands", at(0)),
@@ -102,14 +105,15 @@ enum Demo {
         let friday = calendar.nextDate(after: Date(), matching: DateComponents(weekday: 6), matchingPolicy: .nextTime)!
         let saturday = calendar.date(byAdding: .day, value: 8, to: friday)!
         func entry(_ title: String, _ category: String, kind: String = "task", date: Date? = nil, time: String = "",
-                   flagged: Bool = false, repeatType: String = "none", repeatDay: Int = 0, notes: String = "") -> SortedDump.Entry {
+                   flagged: Bool = false, repeatType: String = "none", repeatDay: Int = 0, notes: String = "",
+                   tags: [String] = []) -> SortedDump.Entry {
             SortedDump.Entry(title: title, category: category, kind: kind, date: date.map { iso.string(from: $0) } ?? "", time: time,
                              endDate: "", endTime: "", location: "", reference: "", notes: notes, flagged: flagged,
-                             repeatType: repeatType, repeatHours: 0, repeatWeekdays: [], repeatDay: repeatDay)
+                             repeatType: repeatType, repeatHours: 0, repeatWeekdays: [], repeatDay: repeatDay, tags: tags)
         }
         return SortedDump(items: [
-            entry("Send Q3 memo to Tom", "work", date: friday),
-            entry("Book a table for Sam's birthday", "social", date: saturday, notes: "Next Saturday"),
+            entry("Send Q3 memo to Tom", "work", date: friday, tags: ["Tom"]),
+            entry("Book a table for Sam's birthday", "social", date: saturday, notes: "Next Saturday", tags: ["Sam"]),
             entry("Pick up dry cleaning", "errands"),
             entry("Call the super about the bathroom tap", "home"),
             entry("Pay rent", "money", repeatType: "monthly", repeatDay: 1),

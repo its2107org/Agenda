@@ -311,6 +311,25 @@ final class AgendaStore {
         data.items.filter { $0.categoryID == categoryID && !$0.isDone && $0.kind == .task }.count
     }
 
+    /// Tags on open to-dos and upcoming bookings, most used first.
+    var tags: [(name: String, count: Int)] {
+        var counts: [String: (String, Int)] = [:]
+        for item in data.items where !item.isDone && (item.kind == .task || (item.end ?? item.due ?? .distantFuture) >= Date()) {
+            for tag in item.tagList {
+                let key = tag.lowercased()
+                counts[key] = (counts[key]?.0 ?? tag, (counts[key]?.1 ?? 0) + 1)
+            }
+        }
+        return counts.values.map { (name: $0.0, count: $0.1) }
+            .sorted { $0.count != $1.count ? $0.count > $1.count : $0.name < $1.name }
+    }
+
+    func items(tagged tag: String, includeDone: Bool = false) -> [Item] {
+        data.items.filter { item in
+            (includeDone || !item.isDone) && item.tagList.contains { $0.caseInsensitiveCompare(tag) == .orderedSame }
+        }.sorted(by: Self.byDue)
+    }
+
     var flagged: [Item] { openTasks.filter(\.flagged).sorted(by: Self.byDue) }
 
     /// Everything on a given day: to-dos, bookings and standing reminders.
@@ -348,6 +367,7 @@ final class AgendaStore {
         return data.items.filter {
             $0.title.localizedCaseInsensitiveContains(needle) || $0.notes.localizedCaseInsensitiveContains(needle)
                 || $0.location.localizedCaseInsensitiveContains(needle)
+                || $0.tagList.contains { $0.localizedCaseInsensitiveContains(needle.trimmingCharacters(in: CharacterSet(charactersIn: "#"))) }
         }.sorted { a, b in
             if a.isDone != b.isDone { return !a.isDone }
             return Self.byDue(a, b)

@@ -36,6 +36,15 @@ struct ItemFields: View {
             })
     }
 
+    /// Tags as "John, Wedding".
+    private var tagText: Binding<String> {
+        Binding(
+            get: { item.tagList.joined(separator: ", ") },
+            set: { text in
+                item.tagList = text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            })
+    }
+
     private var dueBinding: Binding<Date> {
         Binding(get: { item.due ?? Date() }, set: { item.due = $0 })
     }
@@ -69,6 +78,10 @@ struct ItemFields: View {
             Toggle(isOn: $item.flagged) {
                 Label("Important", systemImage: "flag")
             }
+            TextField(text: tagText, prompt: Text("e.g. John, Wedding")) {
+                Label("Tags", systemImage: "number")
+            }
+            .textInputAutocapitalization(.words)
         }
 
         Section {

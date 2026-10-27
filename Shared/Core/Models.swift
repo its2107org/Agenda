@@ -77,6 +77,13 @@ struct Item: Codable, Identifiable, Hashable, Sendable {
     var source: Source = .typed
     /// The matching event in the phone's calendar, if this booking was copied there.
     var calendarEventID: String?
+    /// Grouping tags such as "John" or "Wedding". Optional so lists saved before tags existed still load.
+    var tags: [String]?
+
+    var tagList: [String] {
+        get { tags ?? [] }
+        set { tags = newValue.isEmpty ? nil : newValue }
+    }
 
     var isDone: Bool { doneAt != nil }
     var isEvent: Bool { kind == .event }

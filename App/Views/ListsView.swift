@@ -7,6 +7,7 @@ struct ListsView: View {
 
     enum Destination: Hashable {
         case category(String)
+        case tag(String)
         case anytime, flagged, slipped, done
     }
 
@@ -51,6 +52,30 @@ struct ListsView: View {
                         }
                     }
                     .background(.background.secondary, in: RoundedRectangle(cornerRadius: 22))
+
+                    let tags = store.tags
+                    if !tags.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Tags")
+                                .font(.title3.weight(.bold))
+                                .padding(.leading, 4)
+                            FlowLayout(spacing: 8) {
+                                ForEach(tags, id: \.name) { tag in
+                                    NavigationLink(value: Destination.tag(tag.name)) {
+                                        HStack(spacing: 6) {
+                                            Text("#\(tag.name)").font(.subheadline.weight(.medium))
+                                            Text("\(tag.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                                        }
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(.background.secondary, in: Capsule())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 24)
@@ -171,6 +196,7 @@ struct ListScreen: View {
     private var title: String {
         switch destination {
         case .category: category?.name ?? "List"
+        case .tag(let name): "#\(name)"
         case .anytime: "Anytime"
         case .flagged: "Important"
         case .slipped: "Slipped"
@@ -195,6 +221,9 @@ struct ListScreen: View {
         case .anytime: return (store.anytime, [])
         case .flagged: return (store.flagged, [])
         case .slipped: return (store.overdue(), [])
+        case .tag(let name):
+            let all = store.items(tagged: name, includeDone: true)
+            return (all.filter { !$0.isDone }, all.filter(\.isDone))
         case .done:
             return ([], store.data.items.filter(\.isDone).sorted { ($0.doneAt ?? .now) > ($1.doneAt ?? .now) })
         }
@@ -203,9 +232,7 @@ struct ListScreen: View {
     private func addTyped() {
         guard let category else { return }
         let text = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, var item = QuickParse.item(from: text, categories: store.categories) else { return }
-        item.categoryID = category.id
-        store.add([item])
+        guard !text.isEmpty, Sorter.quickAdd(text, inCategory: category.id) != nil else { return }
         newTitle = ""
         adding = true
     }
@@ -335,6 +362,43 @@ struct CategoryEditor: View {
                     .disabled(category.name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
+        }
+    }
+}
+
+/// Lays out tag chips in rows that wrap.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, widest: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > 0 && x + size.width > width {
+                y += rowHeight + spacing
+                x = 0
+                rowHeight = 0
+            }
+            x += size.width + spacing
+            widest = max(widest, x - spacing)
+            rowHeight = max(rowHeight, size.height)
+        }
+        return CGSize(width: min(widest, width), height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, rowHeight: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > bounds.minX && x + size.width > bounds.maxX {
+                y += rowHeight + spacing
+                x = bounds.minX
+                rowHeight = 0
+            }
+            view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
         }
     }
 }

@@ -16,11 +16,9 @@ struct AddToDoIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let store = AgendaStore.shared
         store.reload()
-        guard var item = QuickParse.item(from: text, categories: store.categories) else {
+        guard let item = Sorter.quickAdd(text, source: .siri) else {
             return .result(dialog: "I didn't catch that.")
         }
-        item.source = .siri
-        store.add([item])
         let category = store.category(item.categoryID).name
         if let due = item.due {
             return .result(dialog: "Added \(item.title) to \(category), \(DateWords.short(due, hasTime: item.hasTime).lowercasedFirst).")

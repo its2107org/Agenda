@@ -129,8 +129,16 @@ struct BrainDumpView: View {
     private func finishListening() async {
         let words = Demo.isOn ? text : await transcriber.stop()
         listening = false
-        let final = words.isEmpty ? text : words
-        guard !final.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let final = (words.isEmpty ? text : words).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !final.isEmpty else { return }
+        // One short thing ("respond to John tonight") is added straight away; a ramble gets sorted.
+        let sentences = QuickParse.expandShorthand(final).split(whereSeparator: { ".!?\n".contains($0) }).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        if !Demo.isOn, final.split(whereSeparator: \.isWhitespace).count <= 14, sentences.count <= 1,
+           !final.lowercased().contains(" and also "), let item = Sorter.quickAdd(final, source: .voice) {
+            Router.shared.showAdded(item)
+            dismiss()
+            return
+        }
         Router.shared.sort(final, source: .voice)
     }
 
@@ -146,7 +154,7 @@ struct BrainDumpView: View {
                 .background(.background.secondary, in: RoundedRectangle(cornerRadius: 16))
                 .submitLabel(.return)
 
-            Text(isQuickAdd ? "Tip: \"Call Sam tomorrow at 3pm\" works. Longer lists get sorted for you."
+            Text(isQuickAdd ? "Try \"Respond to John TN\" or \"Call the bank next Mon at 5pm #money\". Longer lists get sorted for you."
                  : "Agenda will split this into separate to-dos and put each in the right list.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -183,8 +191,8 @@ struct BrainDumpView: View {
     private func submitTyped() {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        if isQuickAdd, let item = QuickParse.item(from: trimmed, categories: AgendaStore.shared.categories) {
-            AgendaStore.shared.add([item])
+        if isQuickAdd, let item = Sorter.quickAdd(trimmed) {
+            Router.shared.showAdded(item)
             text = ""
             dismiss()
         } else {

@@ -57,10 +57,12 @@ struct SortedDump: Codable, Sendable {
         var repeatWeekdays: [Int]
         @Guide(description: "For 'monthly': day of the month, 1-31. Else 0")
         var repeatDay: Int
+        @Guide(description: "0 to 3 short grouping tags: first names of people involved, or a project or event name")
+        var tags: [String]
 
         init(title: String, category: String, kind: String, date: String, time: String, endDate: String,
              endTime: String, location: String, reference: String, notes: String, flagged: Bool,
-             repeatType: String, repeatHours: Double, repeatWeekdays: [Int], repeatDay: Int) {
+             repeatType: String, repeatHours: Double, repeatWeekdays: [Int], repeatDay: Int, tags: [String] = []) {
             self.title = title
             self.category = category
             self.kind = kind
@@ -76,6 +78,7 @@ struct SortedDump: Codable, Sendable {
             self.repeatHours = repeatHours
             self.repeatWeekdays = repeatWeekdays
             self.repeatDay = repeatDay
+            self.tags = tags
         }
     }
 
@@ -185,8 +188,10 @@ enum Sorter {
         - Time: only if one is said ("at 3", "7pm", "tonight" = 19:00, "this morning" = 09:00, "lunch" = 12:30). Otherwise empty.
         - kind 'event' for anything at a fixed time with other people or a venue (dinner booking, appointment, flight, meeting). Everything else is 'task'.
         - repeatType only when he says it repeats ("every month", "each Sunday", "twice a week, 3.5 days apart" = hours 84). Otherwise 'none'.
+        - Shorthand: "TN" or "tn" = tonight, "tmrw"/"tmr" = tomorrow, "EOD" = 17:00 today, "EOW" = Friday, "EOM" = last day of the month, "ASAP" = today. "Next Monday" = the Monday of next week; "Monday" = the coming Monday.
         - flagged only when he says it's urgent or important.
         - Pick the section that fits best; never invent new section ids.
+        - tags: up to 3 short tags that group related things across sections: the first name of each person involved ("John"), and a project, trip or event name when several things belong to it ("Wedding", "London trip"). Capitalise them. Don't repeat the section name. Use the same spelling for the same tag every time. Often none.
         """
         return text
     }
@@ -197,7 +202,7 @@ enum Sorter {
             "type": "object",
             "additionalProperties": false,
             "required": ["title", "category", "kind", "date", "time", "endDate", "endTime", "location", "reference",
-                         "notes", "flagged", "repeatType", "repeatHours", "repeatWeekdays", "repeatDay"],
+                         "notes", "flagged", "repeatType", "repeatHours", "repeatWeekdays", "repeatDay", "tags"],
             "properties": [
                 "title": str(), "category": str(),
                 "kind": ["type": "string", "enum": ["task", "event"]],
@@ -207,7 +212,8 @@ enum Sorter {
                 "repeatType": ["type": "string", "enum": ["none", "hours", "weekly", "monthly"]],
                 "repeatHours": ["type": "number"],
                 "repeatWeekdays": ["type": "array", "items": ["type": "integer"]],
-                "repeatDay": ["type": "integer"]
+                "repeatDay": ["type": "integer"],
+                "tags": ["type": "array", "items": ["type": "string"]]
             ]
         ]
         return [
@@ -236,6 +242,7 @@ enum Sorter {
             item.location = entry.location
             item.reference = entry.reference
             item.flagged = entry.flagged
+            item.tagList = Sorter.cleanTags(entry.tags, categories: categories)
 
             let day = parseDay(entry.date)
             let time = parseTime(entry.time)
@@ -316,60 +323,81 @@ enum Sorter {
             return Proposal(item: item ?? parsed)
         }
     }
-}
 
-/// Reads a typed line like "Call Sam tomorrow at 3pm" without any AI: finds the date and guesses the section.
-enum QuickParse {
-    static func item(from text: String, categories: [Category], now: Date = Date()) -> Item? {
-        var title = text.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
-        guard !title.isEmpty else { return nil }
-        var due: Date?
-        var hasTime = false
-
-        if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue),
-           let match = detector.firstMatch(in: title, range: NSRange(title.startIndex..., in: title)),
-           let date = match.date, let range = Range(match.range, in: title) {
-            let phrase = title[range].lowercased()
-            hasTime = phrase.range(of: #"\d(:\d\d)?\s*(am|pm)|\d:\d\d|noon|midday|tonight|morning|evening|afternoon|\bat \d"#,
-                                   options: .regularExpression) != nil
-            due = hasTime ? date : Calendar.current.startOfDay(for: date)
-            title.removeSubrange(range)
-            title = title.replacingOccurrences(of: #"\s+(on|at|by|for)\s*$"#, with: "", options: .regularExpression)
-            title = title.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression)
-            title = title.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+    static func cleanTags(_ raw: [String], categories: [Category]) -> [String] {
+        var result: [String] = []
+        for tag in raw {
+            var t = tag.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "#")))
+            guard !t.isEmpty, t.count <= 30 else { continue }
+            t = t.prefix(1).uppercased() + t.dropFirst()
+            if categories.contains(where: { $0.name.caseInsensitiveCompare(t) == .orderedSame }) { continue }
+            if !result.contains(where: { $0.caseInsensitiveCompare(t) == .orderedSame }) { result.append(t) }
         }
-        title = title.replacingOccurrences(of: #"^(?i)(i need to|i have to|i've got to|i gotta|need to|have to|remember to|don't forget to|must)\s+"#,
-                                           with: "", options: .regularExpression)
-        guard !title.isEmpty else { return nil }
-        title = title.prefix(1).uppercased() + title.dropFirst()
+        return Array(result.prefix(4))
+    }
 
-        var item = Item(title: title, categoryID: guessCategory(for: title, categories: categories))
-        item.due = due
-        item.hasTime = hasTime
+    // MARK: - Quick add
+
+    /// The list and tags for a single typed or spoken to-do.
+    @Generable
+    struct Refinement: Codable, Sendable {
+        @Guide(description: "The id of the best-fitting section")
+        var category: String
+        @Guide(description: "0 to 3 short grouping tags: first names of people involved, or a project or event name")
+        var tags: [String]
+    }
+
+    /// Adds a single line straight away (dates read on the phone), then lets the AI pick a better
+    /// list and tags in the background.
+    @MainActor
+    @discardableResult
+    static func quickAdd(_ text: String, inCategory fixed: String? = nil, source: Item.Source = .typed) -> Item? {
+        let store = AgendaStore.shared
+        guard var item = QuickParse.item(from: text, categories: store.categories) else { return nil }
+        let explicitList = text.contains("#") && QuickParse.matches(#"#([\p{L}\p{N}][\p{L}\p{N}_-]*)"#, in: text)
+            .contains { QuickParse.category(named: $0.groups[0], in: store.categories) != nil }
+        if let fixed { item.categoryID = fixed }
+        item.source = source
+        store.add([item])
+        let added = item
+        Task {
+            guard let refined = await refine(text, categories: store.categories) else { return }
+            guard var current = store.item(added.id), current.categoryID == added.categoryID,
+                  current.tagList == added.tagList, current.title == added.title else { return }
+            if fixed == nil && !explicitList, store.categories.contains(where: { $0.id == refined.category }) {
+                current.categoryID = refined.category
+            }
+            current.tagList = cleanTags(added.tagList + refined.tags, categories: store.categories)
+            if current != added { store.update(current) }
+        }
         return item
     }
 
-    static let keywords: [String: [String]] = [
-        "work": ["work", "office", "client", "meeting", "deck", "memo", "deal", "boss", "colleague", "email", "call with", "pitch", "model", "invus", "board", "report"],
-        "social": ["dinner", "drinks", "party", "birthday", "friend", "mum", "dad", "brother", "sister", "text", "message", "catch up", "wedding", "gift", "present", "invite"],
-        "home": ["clean", "laundry", "wash", "tidy", "fix", "repair", "flat", "apartment", "kitchen", "bins", "hoover", "vacuum", "dishes", "groceries", "plant"],
-        "errands": ["buy", "pick up", "collect", "return", "post", "shop", "drop off", "dry clean", "pharmacy", "order"],
-        "health": ["doctor", "dentist", "gp", "prescription", "pill", "mounjaro", "gym", "run", "workout", "appointment", "omnipod", "pod", "insulin", "physio"],
-        "money": ["pay", "rent", "bill", "bank", "tax", "insurance", "invoice", "form", "renew", "subscription", "transfer", "card"],
-        "personal": ["read", "book", "learn", "write", "journal", "travel", "holiday", "trip"]
-    ]
+    static func refine(_ text: String, categories: [Category], now: Date = Date()) async -> Refinement? {
+        guard !Demo.isOn, !SelfTest.isRequested else { return nil }
+        let sections = categories.map { "- \($0.id): \($0.name)\($0.hint.isEmpty ? "" : " (\($0.hint))")" }.joined(separator: "\n")
+        let system = """
+        You file one to-do from Ian's list. Pick the section id that fits best, and up to 3 short tags that group it with related to-dos: the first name of each person involved, or a project, trip or event name. Capitalise tags; don't repeat the section name; often there are none.
 
-    static func guessCategory(for title: String, categories: [Category]) -> String {
-        let lower = " " + title.lowercased() + " "
-        var best: (String, Int)?
-        for category in categories {
-            var words = keywords[category.id] ?? []
-            words += category.hint.lowercased().split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-            words.append(category.name.lowercased())
-            let score = words.filter { !$0.isEmpty && lower.contains(" " + $0) }.count
-            if score > 0 && score > (best?.1 ?? 0) { best = (category.id, score) }
+        Sections:
+        \(sections)
+        """
+        let prompt = "To-do: \(text)"
+        if SystemLanguageModel.default.isAvailable {
+            let model = SystemLanguageModel(guardrails: .permissiveContentTransformations)
+            let session = LanguageModelSession(model: model, instructions: system)
+            if let response = try? await session.respond(to: prompt, generating: Refinement.self,
+                                                         options: GenerationOptions(temperature: 0.1)) {
+                return response.content
+            }
         }
-        if let best { return best.0 }
-        return categories.contains { $0.id == "personal" } ? "personal" : (categories.first?.id ?? "personal")
+        guard KeyStore.hasClaudeKey else { return nil }
+        let schema: [String: Any] = [
+            "type": "object", "additionalProperties": false, "required": ["category", "tags"],
+            "properties": ["category": ["type": "string"], "tags": ["type": "array", "items": ["type": "string"]]]
+        ]
+        return try? await Claude.structured(Refinement.self, model: Claude.haiku, system: system,
+                                            content: [["type": "text", "text": prompt]], schema: schema,
+                                            effort: "low", maxTokens: 300)
     }
 }

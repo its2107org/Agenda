@@ -25,6 +25,19 @@ struct RootView: View {
             BrainDumpBar()
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        .overlay(alignment: .top) {
+            if let toast = router.toast {
+                AddedToast(toast: toast)
+                    .padding(.top, 6)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .onTapGesture {
+                        router.toast = nil
+                        router.sheet = .item(toast.itemID)
+                    }
+            }
+        }
+        .animation(.snappy, value: router.toast)
+        .onChange(of: AgendaStore.shared.revision) { router.refreshToast() }
         .sheet(item: $router.sheet) { sheet in
             switch sheet {
             case .brainDump(let listening):
@@ -96,5 +109,28 @@ struct BrainDumpBar: View {
             .accessibilityLabel("Type a to-do")
         }
         .padding(.horizontal, 12)
+    }
+}
+
+/// "Added: Respond to John · Today 7:00 PM · Work · #John"
+struct AddedToast: View {
+    let toast: Router.Toast
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.title3)
+                .foregroundStyle(.green)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(toast.title).font(.subheadline.weight(.semibold)).lineLimit(1)
+                Text(toast.detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Text("Edit").font(.caption.weight(.semibold)).foregroundStyle(.tint)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .glassEffect(.regular, in: Capsule())
+        .padding(.horizontal, 16)
     }
 }

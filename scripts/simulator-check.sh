@@ -52,6 +52,7 @@ for mode in light dark; do
   xcrun simctl ui "$UDID" appearance $mode
   shoot "today-$mode"
   shoot "lists-$mode" -AgendaDemoLists
+  shoot "added-$mode" -AgendaDemoToast
   shoot "calendar-$mode" -AgendaDemoCalendar
   shoot "reminders-$mode" -AgendaDemoReminders
   shoot "dump-$mode" -AgendaDemoDump

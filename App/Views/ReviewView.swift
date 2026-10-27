@@ -163,6 +163,12 @@ struct ProposalRow: View {
                     } else if let when = DateWords.range(proposal.item) {
                         Chip(text: when, symbol: proposal.item.isEvent ? "calendar" : "clock", tint: .secondary)
                     }
+                    ForEach(proposal.item.tagList, id: \.self) { tag in
+                        Text("#\(tag)")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                     if proposal.item.flagged {
                         Image(systemName: "flag.fill").font(.caption).foregroundStyle(.orange)
                     }

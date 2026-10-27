@@ -121,7 +121,42 @@ final class Router {
     var isSorting = false
     var sortingLabel = ""
 
+    /// A short "Added …" note shown after a quick add, so Ian can see where it went.
+    var toast: Toast?
+
+    struct Toast: Equatable {
+        var id = UUID()
+        var itemID: UUID
+        var title: String
+        var detail: String
+    }
+
     private init() {}
+
+    func showAdded(_ item: Item) {
+        let store = AgendaStore.shared
+        var parts: [String] = []
+        if let due = item.due { parts.append(DateWords.short(due, hasTime: item.hasTime)) }
+        parts.append(store.category(item.categoryID).name)
+        parts += item.tagList.map { "#\($0)" }
+        let toast = Toast(itemID: item.id, title: item.title, detail: parts.joined(separator: " · "))
+        self.toast = toast
+        guard !Demo.isOn else { return }
+        Task {
+            try? await Task.sleep(for: .seconds(4))
+            if self.toast?.id == toast.id { self.toast = nil }
+        }
+    }
+
+    /// Shows the latest version of a quick-added to-do (the AI may have refined its list and tags).
+    func refreshToast() {
+        guard let toast, let item = AgendaStore.shared.item(toast.itemID) else { return }
+        var parts: [String] = []
+        if let due = item.due { parts.append(DateWords.short(due, hasTime: item.hasTime)) }
+        parts.append(AgendaStore.shared.category(item.categoryID).name)
+        parts += item.tagList.map { "#\($0)" }
+        self.toast?.detail = parts.joined(separator: " · ")
+    }
 
     func startBrainDump(listening: Bool) {
         sheet = .brainDump(listening: listening)

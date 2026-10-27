@@ -54,15 +54,45 @@ enum SelfTest {
         let split = Sorter.basicSplit("Buy milk. Call the bank and also clean the kitchen", categories: cats, source: .typed, now: now)
         check("simple split without AI", split.count == 3, split.map(\.item.title).joined(separator: " | "))
 
+        // 2b. Plain words and shorthand for days and times (now is Friday 23 October, midday).
+        func parsed(_ text: String) -> Item? { QuickParse.item(from: text, categories: cats, now: now) }
+        func expect(_ text: String, title: String, due: Date?, timed: Bool, category: String? = nil, tags: [String]? = nil) {
+            let item = parsed(text)
+            var ok = item?.title == title && item?.due == due && (due == nil || item?.hasTime == timed)
+            if let category { ok = ok && item?.categoryID == category }
+            if let tags { ok = ok && item?.tagList == tags }
+            check("reads \"\(text)\"", ok,
+                  "\(item?.title ?? "nil") | \(item?.due.map { "\($0)" } ?? "no date") | timed \(item?.hasTime ?? false) | \(item?.categoryID ?? "") | \(item?.tagList ?? [])")
+        }
+        expect("Respond to John TN", title: "Respond to John", due: date(2026, 10, 23, 19), timed: true, category: "work", tags: ["John"])
+        expect("respond next Monday at 5 p.m.", title: "Respond", due: date(2026, 10, 26, 17), timed: true)
+        expect("Call the bank tmrw 9am #money", title: "Call the bank", due: date(2026, 10, 24, 9), timed: true, category: "money")
+        expect("Dinner with Hannah Fri 8pm", title: "Dinner with Hannah", due: date(2026, 10, 30, 20), timed: true, category: "social", tags: ["Hannah"])
+        expect("Send deck EOD", title: "Send deck", due: date(2026, 10, 23, 17), timed: true)
+        expect("Pay rent in 3 days", title: "Pay rent", due: date(2026, 10, 26), timed: false, category: "money")
+        expect("Book flights next week", title: "Book flights", due: date(2026, 10, 26), timed: false)
+        expect("Gym tomorrow morning", title: "Gym", due: date(2026, 10, 24, 9), timed: true, category: "health")
+        expect("Email Tom about the venue #wedding", title: "Email Tom about the venue", due: nil, timed: false, tags: ["Wedding", "Tom"])
+        expect("Text Sarah at 7 tonight", title: "Text Sarah", due: date(2026, 10, 23, 19), timed: true, tags: ["Sarah"])
+        expect("Pick up dry cleaning this afternoon", title: "Pick up dry cleaning", due: date(2026, 10, 23, 14), timed: true, category: "errands")
+        expect("Call Mum at 10", title: "Call Mum", due: date(2026, 10, 24, 10), timed: true)
+        expect("Renew passport by 5 November", title: "Renew passport", due: date(2026, 11, 5), timed: false)
+        expect("Finish the model by Thursday evening", title: "Finish the model", due: date(2026, 10, 29, 18), timed: true)
+        expect("Reply to Ana ASAP", title: "Reply to Ana", due: date(2026, 10, 23), timed: false, tags: ["Ana"])
+        check("next Friday is a week on", QuickParse.weekday(6, prefix: "next", nextWeek: false,
+              today: date(2026, 10, 27), calendar: calendar) == date(2026, 11, 6))
+        check("shorthand expands", QuickParse.expandShorthand("ring dad tn at 5 p.m.") == "ring dad tonight at 5pm",
+              QuickParse.expandShorthand("ring dad tn at 5 p.m."))
+
         // 3. Sorter answers into suggestions.
         let answer = """
         {"items":[
-         {"title":"Book dentist","category":"health","kind":"task","date":"2026-10-27","time":"","endDate":"","endTime":"","location":"","reference":"","notes":"","flagged":false,"repeatType":"none","repeatHours":0,"repeatWeekdays":[],"repeatDay":0},
-         {"title":"Dinner at Carbone","category":"social","kind":"event","date":"2026-10-30","time":"19:30","endDate":"","endTime":"21:30","location":"181 Thompson St","reference":"AB12","notes":"Table for 4","flagged":false,"repeatType":"none","repeatHours":0,"repeatWeekdays":[],"repeatDay":0},
-         {"title":"Pay rent","category":"money","kind":"task","date":"","time":"","endDate":"","endTime":"","location":"","reference":"","notes":"","flagged":false,"repeatType":"monthly","repeatHours":0,"repeatWeekdays":[],"repeatDay":1},
-         {"title":"Ring the bank","category":"nonsense","kind":"task","date":"","time":"16:00","endDate":"","endTime":"","location":"","reference":"","notes":"","flagged":true,"repeatType":"none","repeatHours":0,"repeatWeekdays":[],"repeatDay":0},
-         {"title":"Hotel in London","category":"personal","kind":"event","date":"2026-11-03","time":"","endDate":"2026-11-06","endTime":"","location":"The Hoxton","reference":"","notes":"","flagged":false,"repeatType":"none","repeatHours":0,"repeatWeekdays":[],"repeatDay":0},
-         {"title":"  ","category":"work","kind":"task","date":"","time":"","endDate":"","endTime":"","location":"","reference":"","notes":"","flagged":false,"repeatType":"none","repeatHours":0,"repeatWeekdays":[],"repeatDay":0}
+         {"title":"Book dentist","category":"health","kind":"task","date":"2026-10-27","time":"","endDate":"","endTime":"","location":"","reference":"","notes":"","flagged":false,"repeatType":"none","repeatHours":0,"repeatWeekdays":[],"repeatDay":0,"tags":[]},
+         {"title":"Dinner at Carbone","category":"social","kind":"event","date":"2026-10-30","time":"19:30","endDate":"","endTime":"21:30","location":"181 Thompson St","reference":"AB12","notes":"Table for 4","flagged":false,"repeatType":"none","repeatHours":0,"repeatWeekdays":[],"repeatDay":0,"tags":["sam","Social"," "]},
+         {"title":"Pay rent","category":"money","kind":"task","date":"","time":"","endDate":"","endTime":"","location":"","reference":"","notes":"","flagged":false,"repeatType":"monthly","repeatHours":0,"repeatWeekdays":[],"repeatDay":1,"tags":[]},
+         {"title":"Ring the bank","category":"nonsense","kind":"task","date":"","time":"16:00","endDate":"","endTime":"","location":"","reference":"","notes":"","flagged":true,"repeatType":"none","repeatHours":0,"repeatWeekdays":[],"repeatDay":0,"tags":[]},
+         {"title":"Hotel in London","category":"personal","kind":"event","date":"2026-11-03","time":"","endDate":"2026-11-06","endTime":"","location":"The Hoxton","reference":"","notes":"","flagged":false,"repeatType":"none","repeatHours":0,"repeatWeekdays":[],"repeatDay":0,"tags":[]},
+         {"title":"  ","category":"work","kind":"task","date":"","time":"","endDate":"","endTime":"","location":"","reference":"","notes":"","flagged":false,"repeatType":"none","repeatHours":0,"repeatWeekdays":[],"repeatDay":0,"tags":[]}
         ]}
         """
         let decoded = try? JSONDecoder().decode(SortedDump.self, from: Data(answer.utf8))
@@ -80,11 +110,19 @@ enum SelfTest {
                 check("standing reminder starts 1 Nov", routine?.nextDue == date(2026, 11, 1, 9), "\(String(describing: routine?.nextDue))")
                 check("unknown list falls back to Personal", proposals[3].item.categoryID == "personal")
                 check("time with no day is today", proposals[3].item.due == date(2026, 10, 23, 16) && proposals[3].item.flagged)
+                check("tags tidied", proposals[1].item.tagList == ["Sam"], "\(proposals[1].item.tagList)")
                 let hotel = proposals[4].item
                 check("multi-day booking", hotel.isEvent && hotel.end == date(2026, 11, 7) && hotel.isOn(date(2026, 11, 5))
                       && !hotel.isOn(date(2026, 11, 7)), "\(String(describing: hotel.end))")
             }
         }
+        check("search finds tags", { () -> Bool in
+            let tagged = AgendaStore(testing: AgendaData())
+            var item = Item(title: "Respond", categoryID: "work")
+            item.tagList = ["John"]
+            tagged.add([item])
+            return tagged.search("#john").count == 1 && tagged.tags.first?.name == "John" && tagged.items(tagged: "john").count == 1
+        }())
         check("schema is valid JSON", JSONSerialization.isValidJSONObject(Sorter.schema))
         let prompt = Sorter.instructions(categories: cats, now: now, shared: true)
         check("instructions carry today's date", prompt.contains("2026-10-23") && prompt.contains("money"))
