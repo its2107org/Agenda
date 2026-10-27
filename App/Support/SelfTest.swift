@@ -4,7 +4,7 @@ import Foundation
 /// turning sorter answers into to-dos, moving things around, nudges and the widget's data.
 @MainActor
 enum SelfTest {
-    static var isRequested: Bool { ProcessInfo.processInfo.arguments.contains("-AgendaSelfTest") }
+    nonisolated static var isRequested: Bool { ProcessInfo.processInfo.arguments.contains("-AgendaSelfTest") }
 
     /// Returns true if the self-check ran (the app then does nothing else).
     static func runIfRequested() async -> Bool {
