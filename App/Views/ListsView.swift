@@ -51,7 +51,7 @@ struct ListsView: View {
                             }
                         }
                     }
-                    .background(.background.secondary, in: RoundedRectangle(cornerRadius: 22))
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
 
                     let tags = store.tags
                     if !tags.isEmpty {
@@ -68,7 +68,7 @@ struct ListsView: View {
                                         }
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 8)
-                                        .background(.background.secondary, in: Capsule())
+                                        .background(Color(.secondarySystemGroupedBackground), in: Capsule())
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -121,7 +121,7 @@ struct SmartCard: View {
                     .foregroundStyle(.secondary)
             }
             .padding(14)
-            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 20))
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
         }
         .buttonStyle(.plain)
     }
