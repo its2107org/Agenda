@@ -3,7 +3,7 @@ import Foundation
 import Observation
 
 /// An event from the phone's own calendar (iCloud, Google, work...), shown alongside Agenda's items.
-struct PhoneEvent: Identifiable, Hashable {
+struct PhoneEvent: Identifiable, Hashable, @unchecked Sendable {
     var id: String
     var title: String
     var start: Date
@@ -68,15 +68,20 @@ final class CalendarLink {
         let end = calendar.date(byAdding: .month, value: 3, to: start)!
         let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: nil)
         let agendaIDs = Set(AgendaStore.shared.data.items.compactMap(\.calendarEventID))
-        events = eventStore.events(matching: predicate)
-            .filter { !agendaIDs.contains($0.eventIdentifier ?? "") }
-            .map { event in
-                PhoneEvent(id: event.eventIdentifier ?? UUID().uuidString, title: event.title ?? "Event",
-                           start: event.startDate, end: event.endDate, allDay: event.isAllDay,
-                           location: event.location ?? "", calendarName: event.calendar?.title ?? "",
-                           colour: event.calendar?.cgColor)
-            }
-            .sorted { $0.start < $1.start }
+        // Reading months of events can take a moment, so it happens off the main thread.
+        nonisolated(unsafe) let store = eventStore
+        let fresh = await Task.detached(priority: .userInitiated) {
+            store.events(matching: predicate)
+                .filter { !agendaIDs.contains($0.eventIdentifier ?? "") }
+                .map { event in
+                    PhoneEvent(id: event.eventIdentifier ?? UUID().uuidString, title: event.title ?? "Event",
+                               start: event.startDate, end: event.endDate, allDay: event.isAllDay,
+                               location: event.location ?? "", calendarName: event.calendar?.title ?? "",
+                               colour: event.calendar?.cgColor)
+                }
+                .sorted { $0.start < $1.start }
+        }.value
+        if fresh != events { events = fresh }
     }
 
     func events(on day: Date) -> [PhoneEvent] {

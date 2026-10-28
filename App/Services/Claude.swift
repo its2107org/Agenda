@@ -57,6 +57,15 @@ enum Claude {
         do { return try JSONDecoder().decode(T.self, from: data) } catch { throw ClaudeError.unreadable }
     }
 
+    /// Opens the connection to Claude ahead of time (while Ian is still talking), so the real
+    /// request skips the handshake. Costs nothing: no key is sent and no model runs.
+    static func warmUp() {
+        var request = URLRequest(url: URL(string: "https://api.anthropic.com/")!)
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = 10
+        Task.detached(priority: .utility) { _ = try? await session.data(for: request) }
+    }
+
     /// A tiny call to check a key works.
     static func checkKey() async throws {
         let body: [String: Any] = [

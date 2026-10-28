@@ -113,16 +113,38 @@ enum Nudges {
         var priority: Int
     }
 
-    /// Rebuilds every alert from scratch so they always match the list.
+    /// What was last scheduled, so a change that doesn't affect any alert costs nothing.
+    private static var lastSignature: String?
+
+    static func signature(of plans: [Plan], now: Date) -> String {
+        plans.map { plan in
+            // Alerts due in the next couple of minutes are pinned to "now", so they'd never match exactly.
+            let when = plan.date < now.addingTimeInterval(120) ? "soon" : String(Int(plan.date.timeIntervalSince1970 / 60))
+            return "\(plan.id)|\(when)|\(plan.title)|\(plan.body)|\(plan.category)|\(plan.urgent)"
+        }.joined(separator: "\n")
+    }
+
+    /// Makes the waiting alerts match the list. Rebuilds them only when something actually changed.
     static func rescheduleAll(now: Date = Date()) async {
         let store = AgendaStore.shared
         let center = UNUserNotificationCenter.current()
-        center.removeAllPendingNotificationRequests()
 
         let alarmsAllowed = AlarmManager.shared.authorizationState == .authorized
         await syncAlarms(store: store, allowed: alarmsAllowed, now: now)
 
         let plans = plan(store: store, alarmsAllowed: alarmsAllowed, now: now)
+        let lateCount = store.overdue(now: now).count + store.routines.filter { $0.isDue(now: now) }.count
+        let signature = signature(of: plans, now: now)
+        if signature == lastSignature {
+            // Same plan; only redo it if some alerts have gone off since (or iOS dropped them).
+            let waiting = Set(await center.pendingNotificationRequests().map(\.identifier))
+            if waiting == Set(plans.map(\.id)) {
+                try? await center.setBadgeCount(lateCount)
+                return
+            }
+        }
+        center.removeAllPendingNotificationRequests()
+        lastSignature = signature
         for plan in plans {
             let content = UNMutableNotificationContent()
             content.title = plan.title
@@ -136,7 +158,6 @@ enum Nudges {
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
             try? await center.add(UNNotificationRequest(identifier: plan.id, content: content, trigger: trigger))
         }
-        let lateCount = store.overdue(now: now).count + store.routines.filter { $0.isDue(now: now) }.count
         try? await center.setBadgeCount(lateCount)
     }
 
@@ -250,18 +271,26 @@ enum Nudges {
 
     // MARK: - Alarms for standing reminders
 
+    private static var alarmSignatures: [UUID: String] = [:]
+
     static func syncAlarms(store: AgendaStore, allowed: Bool, now: Date) async {
         let wanted = store.routines.filter { $0.useAlarm && !$0.isPaused && allowed }
         // Cancel alarms that no longer belong to a reminder, or whose reminder moved.
         let known = Set(store.data.routines.flatMap(\.alarmIDs))
-        if let existing = try? AlarmManager.shared.alarms {
-            for alarm in existing where !known.contains(alarm.id) {
-                try? AlarmManager.shared.cancel(id: alarm.id)
-            }
+        let existing = (try? AlarmManager.shared.alarms) ?? []
+        for alarm in existing where !known.contains(alarm.id) {
+            try? AlarmManager.shared.cancel(id: alarm.id)
         }
+        let set = Set(existing.map(\.id))
         for routine in store.data.routines {
+            let wants = wanted.contains(where: { $0.id == routine.id })
+            let signature = "\(wants)|\(routine.nextDue.timeIntervalSince1970)|\(routine.title)|\(routine.symbol)"
+            // Leave a waiting alarm alone if its reminder hasn't changed.
+            if wants, alarmSignatures[routine.id] == signature, !routine.alarmIDs.isEmpty,
+               routine.alarmIDs.allSatisfy(set.contains) { continue }
+            alarmSignatures[routine.id] = signature
             for id in routine.alarmIDs { try? AlarmManager.shared.cancel(id: id) }
-            guard wanted.contains(where: { $0.id == routine.id }) else {
+            guard wants else {
                 if !routine.alarmIDs.isEmpty { store.setAlarmIDs([], for: routine.id) }
                 continue
             }

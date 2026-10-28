@@ -23,6 +23,8 @@ final class AgendaStore {
         } else {
             inMemory = false
             data = AgendaStore.loadFromDisk() ?? AgendaData()
+            let date = AgendaStore.fileDate()
+            AgendaStore.writer.sync { AgendaStore.savedFileDate = date }
         }
     }
 
@@ -34,10 +36,19 @@ final class AgendaStore {
 
     // MARK: - Saving
 
-    private static var fileURL: URL {
+    nonisolated private static let fileURL: URL = {
         let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         return folder.appendingPathComponent("agenda.json")
+    }()
+
+    /// Saving happens on its own queue, in order, so the screen never waits for the disk.
+    private static let writer = DispatchQueue(label: "agenda.save", qos: .userInitiated)
+    /// When the file was last written or read by Agenda (only touched on `writer`).
+    nonisolated(unsafe) private static var savedFileDate: Date?
+
+    nonisolated private static func fileDate() -> Date? {
+        (try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
     }
 
     private static func loadFromDisk() -> AgendaData? {
@@ -45,8 +56,16 @@ final class AgendaStore {
         return try? JSONDecoder().decode(AgendaData.self, from: raw)
     }
 
+    /// Re-reads the file, but only if something other than this copy of Agenda changed it.
     func reload() {
-        guard !inMemory, let fresh = AgendaStore.loadFromDisk() else { return }
+        guard !inMemory else { return }
+        let unchanged = AgendaStore.writer.sync {
+            let date = AgendaStore.fileDate()
+            return date != nil && date == AgendaStore.savedFileDate
+        }
+        guard !unchanged, let fresh = AgendaStore.loadFromDisk() else { return }
+        let date = AgendaStore.fileDate()
+        AgendaStore.writer.sync { AgendaStore.savedFileDate = date }
         data = fresh
         revision += 1
     }
@@ -54,12 +73,22 @@ final class AgendaStore {
     private func persist(reschedule: Bool = true) {
         revision += 1
         guard !inMemory || Demo.isOn else { return }
-        if !inMemory, let raw = try? JSONEncoder().encode(data) {
-            // Readable after the first unlock, so nudges and widget buttons work while the phone is locked.
-            try? raw.write(to: AgendaStore.fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        if !inMemory {
+            let snapshot = data
+            AgendaStore.writer.async {
+                guard let raw = try? JSONEncoder().encode(snapshot) else { return }
+                // Readable after the first unlock, so nudges and widget buttons work while the phone is locked.
+                try? raw.write(to: AgendaStore.fileURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+                AgendaStore.savedFileDate = AgendaStore.fileDate()
+            }
         }
-        writeSnapshot()
+        writeSnapshotSoon()
         if reschedule && !inMemory { Nudges.scheduleSoon() }
+    }
+
+    /// Waits until everything is on disk (used before Agenda goes into the background).
+    nonisolated static func flushToDisk() {
+        writer.sync {}
     }
 
     // MARK: - Sections
@@ -430,7 +459,27 @@ final class AgendaStore {
     }
 
     func writeSnapshot() {
+        snapshotTask?.cancel()
+        snapshotTask = nil
         makeSnapshot().save()
         WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    @ObservationIgnored private var snapshotTask: Task<Void, Never>?
+
+    /// Updates the widgets shortly after a change; several quick changes only update them once.
+    private func writeSnapshotSoon() {
+        snapshotTask?.cancel()
+        snapshotTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            self?.writeSnapshot()
+        }
+    }
+
+    /// Writes anything still waiting, so nothing is lost when Agenda is closed.
+    func flushPending() {
+        if snapshotTask != nil { writeSnapshot() }
+        AgendaStore.flushToDisk()
     }
 }

@@ -117,6 +117,8 @@ struct BrainDumpView: View {
     private func startListeningNow() async {
         problem = nil
         listening = true
+        transcriber.vocabulary = Sorter.vocabulary()
+        if KeyStore.hasClaudeKey { Claude.warmUp() }
         do {
             try await transcriber.start()
         } catch {

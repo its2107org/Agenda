@@ -15,6 +15,8 @@ struct AgendaApp: App {
                     if await SelfTest.runIfRequested() { return }
                     await Demo.runIfRequested()
                     guard !Demo.isOn else { return }
+                    // Gets the speech engine ready now, so the microphone starts instantly later.
+                    Task.detached(priority: .utility) { try? await LiveTranscriber.prepareSpeechFiles() }
                     await Nudges.requestPermissions()
                     await Nudges.rescheduleAll()
                     AgendaStore.shared.tidyOldDone()
@@ -22,7 +24,9 @@ struct AgendaApp: App {
                 .onOpenURL { url in Router.shared.open(url) }
         }
         .onChange(of: scenePhase) { _, phase in
-            guard phase == .active, !Demo.isOn, !SelfTest.isRequested else { return }
+            guard !Demo.isOn, !SelfTest.isRequested else { return }
+            if phase == .background { AgendaStore.shared.flushPending() }
+            guard phase == .active else { return }
             AgendaStore.shared.reload()
             AgendaStore.shared.writeSnapshot()
             Router.shared.checkShareInbox()

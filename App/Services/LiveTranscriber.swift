@@ -48,32 +48,52 @@ final class LiveTranscriber {
         await AVAudioApplication.requestRecordPermission()
     }
 
+    /// Words the speech engine should expect: names, tags, list names, medicines.
+    var vocabulary: [String] = []
+
+    /// Which engine and language to use, worked out once.
+    private static var chosenLocale: Locale?
+    private static var useDictation = false
+    /// Set once Apple's speech files are known to be on the phone, so later starts skip the check.
+    private static var speechFilesReady = false
+
     /// The speech engine for British English, downloaded once by iOS if it isn't on the phone yet.
     static func makeModule() async throws -> any SpeechModule {
-        let wanted = Locale(identifier: "en-GB")
-        if SpeechTranscriber.isAvailable,
-           let locale = await SpeechTranscriber.supportedLocale(equivalentTo: wanted) {
-            return SpeechTranscriber(locale: locale,
-                                     transcriptionOptions: [],
-                                     reportingOptions: [.volatileResults],
-                                     attributeOptions: [])
+        if chosenLocale == nil {
+            let wanted = Locale(identifier: "en-GB")
+            if SpeechTranscriber.isAvailable, let locale = await SpeechTranscriber.supportedLocale(equivalentTo: wanted) {
+                chosenLocale = locale
+                useDictation = false
+            } else if let locale = await DictationTranscriber.supportedLocale(equivalentTo: wanted) {
+                chosenLocale = locale
+                useDictation = true
+            } else {
+                throw Problem.languageUnsupported
+            }
         }
-        guard let locale = await DictationTranscriber.supportedLocale(equivalentTo: wanted) else {
-            throw Problem.languageUnsupported
+        let locale = chosenLocale!
+        if useDictation {
+            return DictationTranscriber(locale: locale,
+                                        contentHints: [],
+                                        transcriptionOptions: [.punctuation],
+                                        reportingOptions: [.volatileResults],
+                                        attributeOptions: [])
         }
-        return DictationTranscriber(locale: locale,
-                                    contentHints: [],
-                                    transcriptionOptions: [.punctuation],
-                                    reportingOptions: [.volatileResults],
-                                    attributeOptions: [])
+        return SpeechTranscriber(locale: locale,
+                                 transcriptionOptions: [],
+                                 reportingOptions: [.volatileResults],
+                                 attributeOptions: [])
     }
 
     /// Makes sure Apple's speech files for English are on the phone. Returns quickly if they are.
+    /// Run when Agenda opens, so the microphone button starts straight away later.
     static func prepareSpeechFiles() async throws {
+        guard !speechFilesReady else { return }
         let module = try await makeModule()
         if let request = try await AssetInventory.assetInstallationRequest(supporting: [module]) {
             try await request.downloadAndInstall()
         }
+        speechFilesReady = true
     }
 
     func start() async throws {
@@ -97,59 +117,71 @@ final class LiveTranscriber {
         }
 
         let module = try await Self.makeModule()
-        do {
-            if let request = try await AssetInventory.assetInstallationRequest(supporting: [module]) {
-                try await request.downloadAndInstall()
-            }
-        } catch {
-            throw Problem.speechUnavailable(error.localizedDescription)
-        }
-
-        let analyzer = SpeechAnalyzer(modules: [module])
-        self.analyzer = analyzer
         guard let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [module]) else {
             throw Problem.speechUnavailable("no audio format")
         }
 
+        // Start the microphone first. What Ian says waits in the stream while the speech engine gets
+        // ready, so the first words aren't lost.
         let (stream, builder) = AsyncStream<AnalyzerInput>.makeStream()
         inputBuilder = builder
-
-        resultsTask = Task { [weak self] in
-            do {
-                if let transcriber = module as? SpeechTranscriber {
-                    for try await result in transcriber.results {
-                        self?.receive(String(result.text.characters), isFinal: result.isFinal)
-                    }
-                } else if let dictation = module as? DictationTranscriber {
-                    for try await result in dictation.results {
-                        self?.receive(String(result.text.characters), isFinal: result.isFinal)
-                    }
-                }
-            } catch {
-                // The stream ends with an error if the engine is torn down early; what was heard is kept.
-            }
-        }
-
-        try await analyzer.start(inputSequence: stream)
-
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0 else {
             throw Problem.microphoneUnavailable("no microphone input")
         }
         let converter = AVAudioConverter(from: inputFormat, to: analyzerFormat)
-        let levelHandler = onLevel
-
         input.removeTap(onBus: 0)
         Self.installTap(on: input, format: inputFormat, converter: converter, analyzerFormat: analyzerFormat,
-                        builder: builder, level: levelHandler)
-
+                        builder: builder, level: onLevel)
         engine.prepare()
         do {
             try engine.start()
         } catch {
             input.removeTap(onBus: 0)
             throw Problem.microphoneUnavailable(error.localizedDescription)
+        }
+
+        do {
+            if !Self.speechFilesReady {
+                if let request = try await AssetInventory.assetInstallationRequest(supporting: [module]) {
+                    try await request.downloadAndInstall()
+                }
+                Self.speechFilesReady = true
+            }
+
+            let analyzer = SpeechAnalyzer(modules: [module])
+            self.analyzer = analyzer
+            if !vocabulary.isEmpty {
+                // Helps it spell names and unusual words the way Ian uses them.
+                let context = AnalysisContext()
+                context.contextualStrings[.general] = Array(vocabulary.prefix(100))
+                try? await analyzer.setContext(context)
+            }
+
+            resultsTask = Task { [weak self] in
+                do {
+                    if let transcriber = module as? SpeechTranscriber {
+                        for try await result in transcriber.results {
+                            self?.receive(String(result.text.characters), isFinal: result.isFinal)
+                        }
+                    } else if let dictation = module as? DictationTranscriber {
+                        for try await result in dictation.results {
+                            self?.receive(String(result.text.characters), isFinal: result.isFinal)
+                        }
+                    }
+                } catch {
+                    // The stream ends with an error if the engine is torn down early; what was heard is kept.
+                }
+            }
+
+            try await analyzer.start(inputSequence: stream)
+        } catch {
+            input.removeTap(onBus: 0)
+            engine.stop()
+            builder.finish()
+            inputBuilder = nil
+            throw Problem.speechUnavailable(error.localizedDescription)
         }
     }
 

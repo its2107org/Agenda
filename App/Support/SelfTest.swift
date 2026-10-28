@@ -165,6 +165,10 @@ enum SelfTest {
         check("nudges within the limit", plans.count <= Nudges.budget, "\(plans.count)")
         check("standing reminder nudges kept", plans.contains { $0.id.hasPrefix("routine-") })
         check("unique nudge ids", Set(plans.map(\.id)).count == plans.count)
+        let fixedNow = Date()
+        check("same plan, same fingerprint (no needless rescheduling)",
+              Nudges.signature(of: plans, now: fixedNow) == Nudges.signature(of: Nudges.plan(store: store, alarmsAllowed: false), now: fixedNow))
+        check("speech knows Ian's words", Sorter.vocabulary().contains("Mounjaro"))
         let tomorrowMorning = calendar.date(bySettingHour: 8, minute: 30, second: 0,
                                             of: calendar.date(byAdding: .day, value: 1, to: Date())!)!
         let morning = Nudges.morningText(store: store, at: tomorrowMorning)

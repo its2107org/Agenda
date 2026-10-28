@@ -99,9 +99,23 @@ enum Sorter {
 
     /// Turns a ramble into separate to-dos, each in a section, with dates where they were said.
     static func sort(_ text: String, categories: [Category], source: Item.Source, now: Date = Date()) async -> Outcome {
-        let task = instructions(categories: categories, now: now, shared: false)
-        let prompt = "Here is what Ian said:\n\n\(text)"
-        return await run(system: task, prompt: prompt, fallbackText: text, categories: categories, source: source, now: now)
+        var task = instructions(categories: categories, now: now, shared: false)
+        if source == .voice {
+            task += """
+
+            - This is a speech-to-text transcript, so some words may be misheard. Fix obvious mistakes from context \
+            (a name or word that sounds like one Ian uses), but never invent details.
+            """
+        }
+        let names = await MainActor.run { vocabulary() }
+        if !names.isEmpty {
+            task += "\n- Names and words Ian often uses (spell them this way): \(names.prefix(80).joined(separator: ", "))."
+        }
+        let prompt = "Here is what Ian \(source == .voice ? "said" : "wrote"):\n\n\(text)"
+        // A short ramble goes to the faster model; a long one to the stronger one.
+        let words = text.split(whereSeparator: \.isWhitespace).count
+        return await run(system: task, prompt: prompt, fallbackText: text, categories: categories, source: source, now: now,
+                         model: words <= 80 ? Claude.haiku : Claude.sonnet, maxTokens: words <= 80 ? 2000 : 4000)
     }
 
     /// Reads something shared from another app (a booking email, web page or screenshot).
@@ -112,7 +126,7 @@ enum Sorter {
         if !drop.link.isEmpty { prompt += "\nLink: \(drop.link)" }
         prompt += ":\n\n\(String(drop.text.prefix(12000)))"
         var outcome = await run(system: task, prompt: prompt, fallbackText: drop.comment.isEmpty ? drop.text : drop.comment,
-                                categories: categories, source: .shared, now: now)
+                                categories: categories, source: .shared, now: now, model: Claude.sonnet, maxTokens: 4000)
         for index in outcome.proposals.indices where outcome.proposals[index].item.link.isEmpty {
             outcome.proposals[index].item.link = drop.link
         }
@@ -120,13 +134,13 @@ enum Sorter {
     }
 
     private static func run(system: String, prompt: String, fallbackText: String, categories: [Category],
-                            source: Item.Source, now: Date) async -> Outcome {
+                            source: Item.Source, now: Date, model: String, maxTokens: Int) async -> Outcome {
         var note: String?
         if KeyStore.hasClaudeKey {
             do {
-                let result = try await Claude.structured(SortedDump.self, model: Claude.sonnet, system: system,
+                let result = try await Claude.structured(SortedDump.self, model: model, system: system,
                                                          content: [["type": "text", "text": prompt]],
-                                                         schema: schema, effort: "low", maxTokens: 6000)
+                                                         schema: schema, effort: "low", maxTokens: maxTokens)
                 return Outcome(proposals: proposals(from: result, categories: categories, source: source, now: now))
             } catch {
                 note = "Claude couldn't help (\((error as? LocalizedError)?.errorDescription ?? "error")), so this was sorted on your phone."
@@ -147,6 +161,26 @@ enum Sorter {
             note = "Add your Claude key in Settings (or turn on Apple Intelligence) for smarter sorting."
         }
         return Outcome(proposals: basicSplit(fallbackText, categories: categories, source: source, now: now), note: note)
+    }
+
+    /// Names, tags, list names and medicines Ian uses, so speech and sorting spell them his way.
+    @MainActor
+    static func vocabulary() -> [String] {
+        let store = AgendaStore.shared
+        var words = ["Mounjaro", "Omnipod", "Trio", "Invus"]
+        words += store.categories.map(\.name)
+        words += store.data.routines.map(\.title)
+        // Most recent first, so the names that matter now make the cut.
+        for item in store.data.items.sorted(by: { $0.created > $1.created }).prefix(300) {
+            words += item.tagList
+            words += QuickParse.people(in: item.title)
+        }
+        var seen = Set<String>()
+        return words.filter { word in
+            let key = word.lowercased()
+            guard !key.isEmpty, word.count <= 40 else { return false }
+            return seen.insert(key).inserted
+        }
     }
 
     // MARK: - Instructions
