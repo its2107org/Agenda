@@ -14,6 +14,10 @@ struct BrainDumpView: View {
     @FocusState private var typing: Bool
 
     private var wordCount: Int { text.split(whereSeparator: \.isWhitespace).count }
+    /// What Agenda has made of the words so far, shown live as Ian talks or types.
+    private var readings: [QuickParse.Reading] {
+        QuickParse.pieces(of: text).compactMap { QuickParse.read($0, categories: AgendaStore.shared.categories) }
+    }
     /// A short single line is added straight away; anything longer goes through the sorter.
     private var isQuickAdd: Bool { !listening && wordCount <= 12 && !text.contains("\n") }
 
@@ -68,14 +72,25 @@ struct BrainDumpView: View {
     // MARK: - Listening
 
     private var listeningView: some View {
-        VStack(spacing: 18) {
+        let readings = self.readings
+        return VStack(spacing: 18) {
             ScrollViewReader { proxy in
                 ScrollView {
-                    Text(text.isEmpty ? "Go ahead: work, plans, chores, bookings, anything you're trying to remember…" : text)
-                        .font(.title3)
-                        .foregroundStyle(text.isEmpty ? .secondary : .primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .id("end")
+                    VStack(alignment: .leading, spacing: 16) {
+                        if text.isEmpty {
+                            Text("Go ahead: anything you're trying to remember. Say \"tonight\" or \"next Monday at 5\" for a time, and \"work list\" or \"hashtag home\" to file it.")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(LivePreview.highlighted(text, readings: readings))
+                                .font(.title3)
+                                .contentTransition(.interpolate)
+                            LivePreview(readings: readings)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .animation(.snappy(duration: 0.25), value: readings.count)
+                    Color.clear.frame(height: 1).id("end")
                 }
                 .onChange(of: text) { proxy.scrollTo("end", anchor: .bottom) }
             }
@@ -147,7 +162,8 @@ struct BrainDumpView: View {
     // MARK: - Typing
 
     private var typingView: some View {
-        VStack(spacing: 14) {
+        let readings = self.readings
+        return VStack(spacing: 14) {
             TextField("Type a to-do, or everything on your mind…", text: $text, axis: .vertical)
                 .font(.title3)
                 .lineLimit(3...12)
@@ -156,13 +172,20 @@ struct BrainDumpView: View {
                 .background(.background.secondary, in: RoundedRectangle(cornerRadius: 16))
                 .submitLabel(.return)
 
-            Text(isQuickAdd ? "Try \"Respond to John TN\" or \"Call the bank next Mon at 5pm #money\". Longer lists get sorted for you."
-                 : "Agenda will split this into separate to-dos and put each in the right list.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Spacer(minLength: 0)
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text("Try \"Respond to John TN\" or \"Call the bank next Mon at 5pm #money\". Name a list (#work, \"home list\") to file it; otherwise it goes in Unsorted.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer(minLength: 0)
+            } else {
+                ScrollView {
+                    LivePreview(readings: readings)
+                        .animation(.snappy(duration: 0.25), value: readings.count)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(maxHeight: .infinity, alignment: .top)
+            }
 
             HStack(spacing: 14) {
                 Button {
@@ -200,6 +223,74 @@ struct BrainDumpView: View {
         } else {
             Router.shared.sort(trimmed, source: .typed)
         }
+    }
+}
+
+/// The to-dos Agenda can see in what Ian is saying or typing, with the day, list and tags it picked up.
+struct LivePreview: View {
+    let readings: [QuickParse.Reading]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(readings.enumerated()), id: \.offset) { _, reading in
+                row(reading)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+    }
+
+    private func row(_ reading: QuickParse.Reading) -> some View {
+        let item = reading.item
+        let list = AgendaStore.shared.category(item.categoryID)
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(item.title)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+            HStack(spacing: 6) {
+                if let due = item.due {
+                    Chip(text: DateWords.short(due, hasTime: item.hasTime), symbol: item.hasTime ? "clock" : "calendar", tint: .red)
+                }
+                Chip(text: list.name, symbol: list.symbol, tint: list.isInbox ? .secondary : list.tint)
+                ForEach(item.tagList, id: \.self) { tag in
+                    Text("#\(tag)")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.purple)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    /// The words as heard, with days and times, lists and tags picked out in colour.
+    static func highlighted(_ text: String, readings: [QuickParse.Reading]) -> AttributedString {
+        var result = AttributedString(text)
+        var searchFrom = result.startIndex
+        func mark(_ phrase: String, _ colour: Color) {
+            let phrase = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !phrase.isEmpty else { return }
+            let range = result[searchFrom...].range(of: phrase, options: .caseInsensitive)
+                ?? result.range(of: phrase, options: .caseInsensitive)
+            guard let range else { return }
+            result[range].foregroundColor = colour
+            result[range].backgroundColor = colour.opacity(0.14)
+        }
+        let store = AgendaStore.shared
+        for reading in readings {
+            let list = store.category(reading.item.categoryID)
+            reading.whenPhrases.forEach { mark($0, .red) }
+            reading.listPhrases.forEach { mark($0, list.tint) }
+            reading.tagPhrases.forEach { mark($0, .purple) }
+            // Later pieces are further along, so keep searching forward.
+            if let first = reading.item.title.split(separator: " ").first,
+               let range = result[searchFrom...].range(of: String(first), options: .caseInsensitive) {
+                searchFrom = range.upperBound
+            }
+        }
+        return result
     }
 }
 

@@ -29,7 +29,7 @@ struct SortedDump: Codable, Sendable {
     struct Entry: Codable, Sendable {
         @Guide(description: "Short to-do in the imperative, e.g. 'Book dentist' or 'Dinner with Sam'")
         var title: String
-        @Guide(description: "The id of the best-fitting section")
+        @Guide(description: "'inbox' unless Ian named a section or said one of its keywords; then that section's id")
         var category: String
         @Guide(description: "'task' for a to-do, 'event' for a booking, reservation or appointment at a fixed time")
         var kind: String
@@ -141,7 +141,8 @@ enum Sorter {
                 let result = try await Claude.structured(SortedDump.self, model: model, system: system,
                                                          content: [["type": "text", "text": prompt]],
                                                          schema: schema, effort: "low", maxTokens: maxTokens)
-                return Outcome(proposals: proposals(from: result, categories: categories, source: source, now: now))
+                return Outcome(proposals: proposals(from: result, categories: categories, source: source, now: now,
+                                                    said: fallbackText))
             } catch {
                 note = "Claude couldn't help (\((error as? LocalizedError)?.errorDescription ?? "error")), so this was sorted on your phone."
             }
@@ -152,7 +153,8 @@ enum Sorter {
                 let session = LanguageModelSession(model: model, instructions: system)
                 let response = try await session.respond(to: prompt, generating: SortedDump.self,
                                                          options: GenerationOptions(temperature: 0.1))
-                let result = proposals(from: response.content, categories: categories, source: source, now: now)
+                let result = proposals(from: response.content, categories: categories, source: source, now: now,
+                                       said: fallbackText)
                 if !result.isEmpty { return Outcome(proposals: result, note: note) }
             } catch {
                 note = note ?? "Your phone's built-in AI couldn't sort this one, so it's been split up simply."
@@ -191,12 +193,11 @@ enum Sorter {
         dateFormatter.dateFormat = "EEEE d MMMM yyyy, HH:mm"
         let iso = DateFormatter()
         iso.dateFormat = "yyyy-MM-dd"
-        let sections = categories.map { "- \($0.id): \($0.name)\($0.hint.isEmpty ? "" : " (\($0.hint))")" }.joined(separator: "\n")
         var text = """
         You organise Ian's to-do list. Right now it is \(dateFormatter.string(from: now)) (\(iso.string(from: now))) in \(TimeZone.current.identifier).
 
         Sections (use the id):
-        \(sections)
+        \(sectionList(categories))
 
         """
         if shared {
@@ -224,10 +225,17 @@ enum Sorter {
         - repeatType only when he says it repeats ("every month", "each Sunday", "twice a week, 3.5 days apart" = hours 84). Otherwise 'none'.
         - Shorthand: "TN" or "tn" = tonight, "tmrw"/"tmr" = tomorrow, "EOD" = 17:00 today, "EOW" = Friday, "EOM" = last day of the month, "ASAP" = today. "Next Monday" = the Monday of next week; "Monday" = the coming Monday.
         - flagged only when he says it's urgent or important.
-        - Pick the section that fits best; never invent new section ids.
+        - category: Ian files things himself. Use 'inbox' unless, for that entry, he names a section ("work list", "for work", "on my home list", "#home", "hashtag money", or the section name tagged on at the end) or says one of its keywords. Never guess a section from the topic: "ask Irina about the security deposit" stays in 'inbox'. Drop the words he used to file it from the title. Never invent section ids.
         - tags: up to 3 short tags that group related things across sections: the first name of each person involved ("John"), and a project, trip or event name when several things belong to it ("Wedding", "London trip"). Capitalise them. Don't repeat the section name. Use the same spelling for the same tag every time. Often none.
         """
         return text
+    }
+
+    static func sectionList(_ categories: [Category]) -> String {
+        categories.map { category in
+            let words = category.keywords
+            return "- \(category.id): \(category.name)\(words.isEmpty ? "" : " (keywords: \(words.joined(separator: ", ")))")"
+        }.joined(separator: "\n")
     }
 
     static let schema: [String: Any] = {
@@ -260,16 +268,22 @@ enum Sorter {
 
     // MARK: - Turning answers into suggestions
 
+    /// `said` is Ian's own words: a list the AI picked only counts if those words point at it.
     static func proposals(from result: SortedDump, categories: [Category], source: Item.Source,
-                          now: Date = Date()) -> [Proposal] {
+                          now: Date = Date(), said: String? = nil) -> [Proposal] {
         let calendar = Calendar.current
         let validIDs = Set(categories.map(\.id))
-        let fallbackID = validIDs.contains("personal") ? "personal" : (categories.first?.id ?? "personal")
+        let fallbackID = categories.first(where: \.isInbox)?.id ?? categories.first?.id ?? Category.inboxID
+        func filed(_ id: String) -> String {
+            guard validIDs.contains(id) else { return fallbackID }
+            guard let said, let category = categories.first(where: { $0.id == id }) else { return id }
+            return QuickParse.mentions(category, in: said) ? id : fallbackID
+        }
 
         return result.items.compactMap { entry in
             let title = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !title.isEmpty else { return nil }
-            var item = Item(title: title, categoryID: validIDs.contains(entry.category) ? entry.category : fallbackID)
+            var item = Item(title: title, categoryID: filed(entry.category))
             item.kind = entry.kind == "event" ? .event : .task
             item.source = source
             item.notes = entry.notes
@@ -342,15 +356,7 @@ enum Sorter {
 
     /// Splits a ramble into sentences and reads dates with the phone's own date finder.
     static func basicSplit(_ text: String, categories: [Category], source: Item.Source, now: Date = Date()) -> [Proposal] {
-        var pieces: [String] = []
-        text.enumerateSubstrings(in: text.startIndex..., options: .bySentences) { sentence, _, _, _ in
-            if let sentence { pieces.append(sentence) }
-        }
-        let separators = [" and also ", " also ", " and then ", "\n", ";"]
-        for separator in separators {
-            pieces = pieces.flatMap { $0.components(separatedBy: separator) }
-        }
-        return pieces.compactMap { piece -> Proposal? in
+        QuickParse.pieces(of: text).compactMap { piece -> Proposal? in
             var item = QuickParse.item(from: piece, categories: categories, now: now)
             guard let parsed = item, parsed.title.count > 1 else { return nil }
             item?.source = source
@@ -372,24 +378,20 @@ enum Sorter {
 
     // MARK: - Quick add
 
-    /// The list and tags for a single typed or spoken to-do.
+    /// Extra tags for a single typed or spoken to-do (the list is only ever set by Ian).
     @Generable
     struct Refinement: Codable, Sendable {
-        @Guide(description: "The id of the best-fitting section")
-        var category: String
         @Guide(description: "0 to 3 short grouping tags: first names of people involved, or a project or event name")
         var tags: [String]
     }
 
-    /// Adds a single line straight away (dates read on the phone), then lets the AI pick a better
-    /// list and tags in the background.
+    /// Adds a single line straight away (dates and lists read on the phone), then lets the AI
+    /// suggest grouping tags in the background.
     @MainActor
     @discardableResult
     static func quickAdd(_ text: String, inCategory fixed: String? = nil, source: Item.Source = .typed) -> Item? {
         let store = AgendaStore.shared
         guard var item = QuickParse.item(from: text, categories: store.categories) else { return nil }
-        let explicitList = text.contains("#") && QuickParse.matches(#"#([\p{L}\p{N}][\p{L}\p{N}_-]*)"#, in: text)
-            .contains { QuickParse.category(named: $0.groups[0], in: store.categories) != nil }
         if let fixed { item.categoryID = fixed }
         item.source = source
         store.add([item])
@@ -398,9 +400,6 @@ enum Sorter {
             guard let refined = await refine(text, categories: store.categories) else { return }
             guard var current = store.item(added.id), current.categoryID == added.categoryID,
                   current.tagList == added.tagList, current.title == added.title else { return }
-            if fixed == nil && !explicitList, store.categories.contains(where: { $0.id == refined.category }) {
-                current.categoryID = refined.category
-            }
             current.tagList = cleanTags(added.tagList + refined.tags, categories: store.categories)
             if current != added { store.update(current) }
         }
@@ -409,12 +408,9 @@ enum Sorter {
 
     static func refine(_ text: String, categories: [Category], now: Date = Date()) async -> Refinement? {
         guard !Demo.isOn, !SelfTest.isRequested else { return nil }
-        let sections = categories.map { "- \($0.id): \($0.name)\($0.hint.isEmpty ? "" : " (\($0.hint))")" }.joined(separator: "\n")
+        let names = categories.map(\.name).joined(separator: ", ")
         let system = """
-        You file one to-do from Ian's list. Pick the section id that fits best, and up to 3 short tags that group it with related to-dos: the first name of each person involved, or a project, trip or event name. Capitalise tags; don't repeat the section name; often there are none.
-
-        Sections:
-        \(sections)
+        Suggest up to 3 short tags that group this to-do from Ian's list with related ones: the first name of each person involved, or a project, trip or event name. Capitalise them. Never use a list name (\(names)). Often there are none.
         """
         let prompt = "To-do: \(text)"
         if SystemLanguageModel.default.isAvailable {
@@ -427,8 +423,8 @@ enum Sorter {
         }
         guard KeyStore.hasClaudeKey else { return nil }
         let schema: [String: Any] = [
-            "type": "object", "additionalProperties": false, "required": ["category", "tags"],
-            "properties": ["category": ["type": "string"], "tags": ["type": "array", "items": ["type": "string"]]]
+            "type": "object", "additionalProperties": false, "required": ["tags"],
+            "properties": ["tags": ["type": "array", "items": ["type": "string"]]]
         ]
         return try? await Claude.structured(Refinement.self, model: Claude.haiku, system: system,
                                             content: [["type": "text", "text": prompt]], schema: schema,

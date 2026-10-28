@@ -35,7 +35,7 @@ struct CalendarScreen: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Add on this day", systemImage: "plus") {
-                        var item = Item(title: "", categoryID: "personal")
+                        var item = Item(title: "", categoryID: Category.inboxID)
                         item.due = selected
                         pendingNew = item
                     }

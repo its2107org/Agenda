@@ -9,26 +9,42 @@ struct Category: Codable, Identifiable, Hashable, Sendable {
     var name: String
     var symbol: String
     var colour: Int
-    /// A few words that help the sorter, e.g. "office, clients, emails".
+    /// Extra words Ian chose that file a to-do here when he says or types them, e.g. "gym, physio".
+    /// (Saying the list's own name always works.)
     var hint: String = ""
 
     var tint: Color { Palette.colour(colour) }
 
+    var keywords: [String] {
+        hint.lowercased().split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    var isInbox: Bool { id == Category.inboxID }
+
+    /// Where anything goes that Ian didn't file himself.
+    static let inboxID = "inbox"
+    static let inbox = Category(id: inboxID, name: "Unsorted", symbol: "tray.fill", colour: 9)
+
     static let defaults: [Category] = [
-        Category(id: "work", name: "Work", symbol: "briefcase.fill", colour: 0,
-                 hint: "job, office, colleagues, clients, deals, meetings, emails to send for work"),
-        Category(id: "social", name: "Social", symbol: "person.2.fill", colour: 1,
-                 hint: "friends, family, plans, dinners, parties, birthdays, messages to people, gifts"),
-        Category(id: "home", name: "Home", symbol: "house.fill", colour: 2,
-                 hint: "chores, cleaning, laundry, repairs, the flat, groceries for the house"),
-        Category(id: "errands", name: "Errands", symbol: "bag.fill", colour: 3,
-                 hint: "shopping, returns, picking things up, post office, dry cleaning"),
-        Category(id: "health", name: "Health", symbol: "heart.fill", colour: 4,
-                 hint: "doctor, dentist, prescriptions, medication, exercise, gym"),
-        Category(id: "money", name: "Money & admin", symbol: "doc.text.fill", colour: 5,
-                 hint: "bills, rent, bank, tax, insurance, forms, subscriptions, paperwork"),
-        Category(id: "personal", name: "Personal", symbol: "sparkles", colour: 6,
-                 hint: "reading, hobbies, learning, ideas, travel planning, anything just for me")
+        inbox,
+        Category(id: "work", name: "Work", symbol: "briefcase.fill", colour: 0),
+        Category(id: "social", name: "Social", symbol: "person.2.fill", colour: 1),
+        Category(id: "home", name: "Home", symbol: "house.fill", colour: 2),
+        Category(id: "errands", name: "Errands", symbol: "bag.fill", colour: 3),
+        Category(id: "health", name: "Health", symbol: "heart.fill", colour: 4),
+        Category(id: "money", name: "Money & admin", symbol: "doc.text.fill", colour: 5),
+        Category(id: "personal", name: "Personal", symbol: "sparkles", colour: 6)
+    ]
+
+    /// The topic hints earlier versions filled in; they guessed lists from the topic, which Ian didn't want.
+    static let oldHints: Set<String> = [
+        "job, office, colleagues, clients, deals, meetings, emails to send for work",
+        "friends, family, plans, dinners, parties, birthdays, messages to people, gifts",
+        "chores, cleaning, laundry, repairs, the flat, groceries for the house",
+        "shopping, returns, picking things up, post office, dry cleaning",
+        "doctor, dentist, prescriptions, medication, exercise, gym",
+        "bills, rent, bank, tax, insurance, forms, subscriptions, paperwork",
+        "reading, hobbies, learning, ideas, travel planning, anything just for me"
     ]
 }
 
@@ -169,7 +185,7 @@ struct Routine: Codable, Identifiable, Hashable, Sendable {
     var id = UUID()
     var title: String
     var symbol: String = "repeat"
-    var categoryID: String = "personal"
+    var categoryID: String = Category.inboxID
     var schedule: RoutineSchedule
     /// When this is next due. Stays in the past (overdue) until it's marked done.
     var nextDue: Date
@@ -333,4 +349,18 @@ struct AgendaData: Codable, Sendable {
     var routines: [Routine] = []
     var categories: [Category] = Category.defaults
     var log: [LogEntry] = []
+
+    /// Brings lists saved by earlier versions up to date. Returns true if anything changed.
+    mutating func upgrade() -> Bool {
+        var changed = false
+        if !categories.contains(where: \.isInbox) {
+            categories.insert(Category.inbox, at: 0)
+            changed = true
+        }
+        for index in categories.indices where Category.oldHints.contains(categories[index].hint) {
+            categories[index].hint = ""
+            changed = true
+        }
+        return changed
+    }
 }

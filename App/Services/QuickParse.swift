@@ -8,23 +8,50 @@ enum QuickParse {
         var hasTime: Bool
     }
 
+    /// What was recognised in a line, for the live preview while Ian talks or types.
+    struct Reading {
+        var item: Item
+        /// The words that set the day or time ("next Monday at 5pm").
+        var whenPhrases: [String] = []
+        /// The words that filed it in a list ("#work", "work list").
+        var listPhrases: [String] = []
+        /// The words that became tags ("#wedding").
+        var tagPhrases: [String] = []
+        /// True if Ian filed it himself (otherwise it goes to Unsorted).
+        var filed: Bool { !listPhrases.isEmpty }
+    }
+
     static func item(from text: String, categories: [Category], now: Date = Date(), calendar: Calendar = .current) -> Item? {
+        read(text, categories: categories, now: now, calendar: calendar)?.item
+    }
+
+    static func read(_ text: String, categories: [Category], now: Date = Date(), calendar: Calendar = .current) -> Reading? {
         var working = " " + expandShorthand(text.trimmingCharacters(in: .whitespacesAndNewlines)) + " "
+        var listPhrases: [String] = []
+        var tagPhrases: [String] = []
 
         // #tags and #list names.
         var tags: [String] = []
         var categoryID: String?
         for match in matches(#"(?<!\w)#([\p{L}\p{N}][\p{L}\p{N}_-]*)"#, in: working).reversed() {
             let word = match.groups[0]
+            let phrase = String(working[match.range])
             if let list = category(named: word, in: categories) {
                 categoryID = categoryID ?? list
+                listPhrases.append(phrase)
             } else {
                 tags.insert(tidyTag(word), at: 0)
+                tagPhrases.append(phrase)
             }
-            working.removeSubrange(match.range)
+            working.replaceSubrange(match.range, with: " ")
         }
 
-        let when = findWhen(in: &working, now: now, calendar: calendar)
+        var whenPhrases: [String] = []
+        let when = findWhen(in: &working, now: now, calendar: calendar, phrases: &whenPhrases)
+        if categoryID == nil, let mention = listMention(in: &working, categories: categories) {
+            categoryID = mention.0
+            listPhrases.append(mention.1)
+        }
 
         var title = working
         title = title.replacingOccurrences(of: #"(?i)\s+(on|at|by|for|before|until|till|due)\s*$"#, with: "", options: .regularExpression)
@@ -39,11 +66,29 @@ enum QuickParse {
             tags.append(person)
         }
 
-        var item = Item(title: title, categoryID: categoryID ?? guessCategory(for: title, categories: categories))
+        if categoryID == nil, let keyword = keywordMatch(in: title, categories: categories) {
+            categoryID = keyword.0
+            listPhrases.append(keyword.1)
+        }
+        let inbox = categories.first(where: \.isInbox)?.id ?? categories.first?.id ?? Category.inboxID
+        var item = Item(title: title, categoryID: categoryID ?? inbox)
         item.due = when?.due
         item.hasTime = when?.hasTime ?? false
         item.tagList = tags
-        return item
+        return Reading(item: item, whenPhrases: whenPhrases, listPhrases: listPhrases, tagPhrases: tagPhrases)
+    }
+
+    /// Splits a ramble into the separate things in it (sentences, "and also", new lines).
+    static func pieces(of text: String) -> [String] {
+        var pieces: [String] = []
+        text.enumerateSubstrings(in: text.startIndex..., options: .bySentences) { sentence, _, _, _ in
+            if let sentence { pieces.append(sentence) }
+        }
+        let separators = [" and also ", " also ", " and then ", "\n", ";"]
+        for separator in separators {
+            pieces = pieces.flatMap { $0.components(separatedBy: separator) }
+        }
+        return pieces.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
     // MARK: - Shorthand
@@ -61,7 +106,9 @@ enum QuickParse {
             (#"(?i)(?<![\w'])(wknd|wkend)(?![\w'])"#, "weekend"),
             (#"(?i)(?<![\w'])(wk)(?![\w'])"#, "week"),
             (#"(?i)(\d)\s*([ap])\.?\s?m\.?(?![\w])"#, "$1$2m"),
-            (#"(?i)(?<![\w'])asap(?![\w'])"#, "today")
+            (#"(?i)(?<![\w'])asap(?![\w'])"#, "today"),
+            // Spoken "hashtag work" or "hash work".
+            (#"(?i)(?<![\w'])(?:hashtag|hash tag)\s+([\p{L}\p{N}][\p{L}\p{N}_-]*)"#, "#$1")
         ]
         var result = text
         for (pattern, replacement) in swaps {
@@ -85,6 +132,11 @@ enum QuickParse {
 
     /// Finds the day and time in a line and removes those words from it.
     static func findWhen(in text: inout String, now: Date, calendar: Calendar) -> When? {
+        var phrases: [String] = []
+        return findWhen(in: &text, now: now, calendar: calendar, phrases: &phrases)
+    }
+
+    static func findWhen(in text: inout String, now: Date, calendar: Calendar, phrases: inout [String]) -> When? {
         let today = calendar.startOfDay(for: now)
         var day: Date?
         var time: (Int, Int)?
@@ -94,6 +146,7 @@ enum QuickParse {
 
         func take(_ pattern: String, _ handle: ([String]) -> Bool) {
             if let match = matches(pattern, in: text).first, handle(match.groups) {
+                phrases.append(String(text[match.range]).trimmingCharacters(in: .whitespaces))
                 text.replaceSubrange(match.range, with: " ")
             }
         }
@@ -255,6 +308,7 @@ enum QuickParse {
                 let parts = calendar.dateComponents([.hour, .minute], from: date)
                 time = (parts.hour ?? 9, parts.minute ?? 0)
             }
+            phrases.append(String(text[range]))
             text.replaceSubrange(range, with: " ")
             // Drop a dangling "on the" left behind.
             text = text.replacingOccurrences(of: #"(?i)\s+(on|by)\s+the\s*$"#, with: " ", options: .regularExpression)
@@ -330,28 +384,61 @@ enum QuickParse {
         return names
     }
 
-    static let keywords: [String: [String]] = [
-        "work": ["work", "office", "client", "meeting", "deck", "memo", "deal", "boss", "colleague", "email", "call with", "pitch", "model", "invus", "board", "report", "respond", "reply", "follow up", "send", "review", "ic memo", "diligence"],
-        "social": ["dinner", "drinks", "party", "birthday", "friend", "mum", "dad", "brother", "sister", "text", "message", "catch up", "wedding", "gift", "present", "invite", "brunch", "lunch with"],
-        "home": ["clean", "laundry", "wash", "tidy", "fix", "repair", "flat", "apartment", "kitchen", "bins", "hoover", "vacuum", "dishes", "groceries", "plant", "super", "landlord"],
-        "errands": ["buy", "pick up", "collect", "return", "post", "shop", "drop off", "dry clean", "pharmacy", "order"],
-        "health": ["doctor", "dentist", "gp", "prescription", "pill", "mounjaro", "gym", "run", "workout", "appointment", "omnipod", "pod", "insulin", "physio", "trio"],
-        "money": ["pay", "rent", "bill", "bank", "tax", "insurance", "invoice", "form", "renew", "subscription", "transfer", "card", "venmo"],
-        "personal": ["read", "book", "learn", "write", "journal", "travel", "holiday", "trip"]
-    ]
-
-    static func guessCategory(for title: String, categories: [Category]) -> String {
-        let lower = " " + title.lowercased() + " "
-        var best: (String, Int)?
+    /// A list Ian named himself: "work list", "on my home list", "for work", "under money", or the
+    /// list's name at the very end ("call the bank, money"). Those words are taken out of the title.
+    static func listMention(in text: inout String, categories: [Category]) -> (String, String)? {
         for category in categories {
-            var words = keywords[category.id] ?? []
-            words += category.hint.lowercased().split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-            words.append(category.name.lowercased())
-            let score = words.filter { !$0.isEmpty && lower.contains(" " + $0) }.count
-            if score > 0 && score > (best?.1 ?? 0) { best = (category.id, score) }
+            var names = [category.name.lowercased()]
+            // "Money & admin" can also be called "money" or "admin".
+            names += category.name.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+                .map(String.init).filter { $0.count >= 4 && !names.contains($0) }
+            for name in names {
+                let n = NSRegularExpression.escapedPattern(for: name)
+                let patterns = [
+                    #"(?i)\s*,?\s*\b(?:(?:add|put|file|save)\s+(?:it\s+)?)?(?:(?:on|to|in|into|onto|under)\s+)?(?:the\s+|my\s+)?"# + n + #"\s+list\b"#,
+                    #"(?i)\s*,?\s*\b(?:(?:add|put|file|save)\s+(?:it\s+)?)?(?:for|under|in|into)\s+(?:the\s+|my\s+)?"# + n + #"[\s,.;:!]*$"#,
+                    #"(?i)[,;:–—-]\s*"# + n + #"[\s.!]*$"#
+                ]
+                for pattern in patterns {
+                    if let match = matches(pattern, in: text).first {
+                        let phrase = String(text[match.range]).trimmingCharacters(in: CharacterSet(charactersIn: " ,;:.!–—-"))
+                        text.replaceSubrange(match.range, with: " ")
+                        return (category.id, phrase)
+                    }
+                }
+            }
         }
-        if let best { return best.0 }
-        return categories.contains { $0.id == "personal" } ? "personal" : (categories.first?.id ?? "personal")
+        return nil
+    }
+
+    /// One of the extra keywords Ian set on a list (Lists → edit a list), said anywhere as a whole word.
+    static func keywordMatch(in text: String, categories: [Category]) -> (String, String)? {
+        let lower = text.lowercased()
+        for category in categories {
+            for keyword in category.keywords {
+                let pattern = #"(?<![\p{L}\p{N}])"# + NSRegularExpression.escapedPattern(for: keyword) + #"(?![\p{L}\p{N}])"#
+                if lower.range(of: pattern, options: .regularExpression) != nil { return (category.id, keyword) }
+            }
+        }
+        return nil
+    }
+
+    /// The list a line belongs in: one Ian named or a keyword he set, otherwise Unsorted.
+    static func guessCategory(for title: String, categories: [Category]) -> String {
+        var text = " " + title + " "
+        if let mention = listMention(in: &text, categories: categories) { return mention.0 }
+        if let keyword = keywordMatch(in: title, categories: categories) { return keyword.0 }
+        return categories.first(where: \.isInbox)?.id ?? categories.first?.id ?? Category.inboxID
+    }
+
+    /// True if Ian's own words point at this list (its name, #name or one of its keywords).
+    static func mentions(_ category: Category, in text: String) -> Bool {
+        if category.isInbox { return true }
+        var copy = " " + expandShorthand(text) + " "
+        if listMention(in: &copy, categories: [category]) != nil { return true }
+        if keywordMatch(in: text, categories: [category]) != nil { return true }
+        let hashes = matches(#"#([\p{L}\p{N}][\p{L}\p{N}_-]*)"#, in: expandShorthand(text)).map { $0.groups[0] }
+        return hashes.contains { QuickParse.category(named: $0, in: [category]) != nil }
     }
 
     // MARK: - Regex helper

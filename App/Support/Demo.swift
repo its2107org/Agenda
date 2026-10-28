@@ -7,7 +7,7 @@ enum Demo {
     static var isOn: Bool { arguments.contains("-AgendaDemo") }
     static func flag(_ name: String) -> Bool { arguments.contains("-AgendaDemo\(name)") }
 
-    static let dumpText = "Okay so I need to send the Q3 memo to Tom by Friday, and book a table somewhere for Sam's birthday next Saturday. Also pick up the dry cleaning, oh and the bathroom tap is still dripping so call the super. Pay rent on the first of every month. And I should really renew my passport, that's urgent."
+    static let dumpText = "Okay so I need to send the Q3 memo to Tom by Friday for work, and book a table somewhere for Sam's birthday next Saturday. Also pick up the dry cleaning, oh and the bathroom tap is still dripping so call the super, home list. Pay rent on the first of every month. And I should really renew my passport, that's urgent."
 
     @MainActor
     static func runIfRequested() async {
@@ -61,7 +61,7 @@ enum Demo {
             { var i = task("Reply to Hannah about the wedding", "social", at(-2)); i.tagList = ["Hannah", "Wedding"]; return i }(),
             { var i = task("Send Q3 memo to Tom", "work", at(0, 11), time: true, flagged: true); i.tagList = ["Tom"]; return i }(),
             event("Dinner at Via Carota", "social", at(0, 19, 30), hours: 2, place: "51 Grove St", ref: "VC-4821"),
-            task("Book dentist check-up", "health", at(0)),
+            task("Book dentist check-up", "inbox", at(0)),
             task("Pick up dry cleaning", "errands", at(0)),
             task("Call Mum", "social", at(0)),
             task("Pay electricity bill", "money", at(0), done: true),
@@ -72,7 +72,8 @@ enum Demo {
             event("Sam's birthday drinks", "social", at(2, 20), hours: 3, place: "Bemelmans Bar"),
             event("Flight to London · BA 178", "personal", at(6, 18, 25), hours: 7, place: "JFK Terminal 8", ref: "X7K2QP"),
             task("Read Poor Charlie's Almanack", "personal"),
-            task("Find a new barber", "personal"),
+            task("Find a new barber", "inbox"),
+            task("Ask Irina about the security deposit", "inbox"),
             task("Fix the bathroom tap", "home", flagged: false, notes: "Call the super if it's still dripping")
         ]
         var mounjaro = Routine.mounjaroPreset()
@@ -113,11 +114,11 @@ enum Demo {
         }
         return SortedDump(items: [
             entry("Send Q3 memo to Tom", "work", date: friday, tags: ["Tom"]),
-            entry("Book a table for Sam's birthday", "social", date: saturday, notes: "Next Saturday", tags: ["Sam"]),
-            entry("Pick up dry cleaning", "errands"),
+            entry("Book a table for Sam's birthday", "inbox", date: saturday, notes: "Next Saturday", tags: ["Sam"]),
+            entry("Pick up dry cleaning", "inbox"),
             entry("Call the super about the bathroom tap", "home"),
-            entry("Pay rent", "money", repeatType: "monthly", repeatDay: 1),
-            entry("Renew passport", "money", flagged: true)
+            entry("Pay rent", "inbox", repeatType: "monthly", repeatDay: 1),
+            entry("Renew passport", "inbox", flagged: true)
         ])
     }
 }

@@ -47,10 +47,11 @@ enum SelfTest {
         check("quick add time", call?.hasTime == true && call?.due.map { calendar.component(.hour, from: $0) } == 15,
               "\(String(describing: call?.due))")
         let rentTodo = QuickParse.item(from: "I need to pay the rent", categories: cats, now: now)
-        check("quick add drops 'I need to' and picks Money", rentTodo?.title == "Pay the rent" && rentTodo?.categoryID == "money",
+        check("quick add drops 'I need to', stays Unsorted", rentTodo?.title == "Pay the rent" && rentTodo?.categoryID == "inbox",
               "\(rentTodo?.title ?? "") \(rentTodo?.categoryID ?? "")")
         check("quick add with no date", rentTodo?.due == nil)
-        check("dinner goes to Social", QuickParse.guessCategory(for: "Dinner with Hannah", categories: cats) == "social")
+        check("no guessing from the topic", QuickParse.guessCategory(for: "Dinner with Hannah", categories: cats) == "inbox"
+              && QuickParse.guessCategory(for: "Irina on security deposit", categories: cats) == "inbox")
         let split = Sorter.basicSplit("Buy milk. Call the bank and also clean the kitchen", categories: cats, source: .typed, now: now)
         check("simple split without AI", split.count == 3, split.map(\.item.title).joined(separator: " | "))
 
@@ -64,21 +65,38 @@ enum SelfTest {
             check("reads \"\(text)\"", ok,
                   "\(item?.title ?? "nil") | \(item?.due.map { "\($0)" } ?? "no date") | timed \(item?.hasTime ?? false) | \(item?.categoryID ?? "") | \(item?.tagList ?? [])")
         }
-        expect("Respond to John TN", title: "Respond to John", due: date(2026, 10, 23, 19), timed: true, category: "work", tags: ["John"])
+        expect("Respond to John TN", title: "Respond to John", due: date(2026, 10, 23, 19), timed: true, category: "inbox", tags: ["John"])
         expect("respond next Monday at 5 p.m.", title: "Respond", due: date(2026, 10, 26, 17), timed: true)
         expect("Call the bank tmrw 9am #money", title: "Call the bank", due: date(2026, 10, 24, 9), timed: true, category: "money")
-        expect("Dinner with Hannah Fri 8pm", title: "Dinner with Hannah", due: date(2026, 10, 30, 20), timed: true, category: "social", tags: ["Hannah"])
+        expect("Dinner with Hannah Fri 8pm", title: "Dinner with Hannah", due: date(2026, 10, 30, 20), timed: true, category: "inbox", tags: ["Hannah"])
         expect("Send deck EOD", title: "Send deck", due: date(2026, 10, 23, 17), timed: true)
-        expect("Pay rent in 3 days", title: "Pay rent", due: date(2026, 10, 26), timed: false, category: "money")
+        expect("Pay rent in 3 days", title: "Pay rent", due: date(2026, 10, 26), timed: false, category: "inbox")
         expect("Book flights next week", title: "Book flights", due: date(2026, 10, 26), timed: false)
-        expect("Gym tomorrow morning", title: "Gym", due: date(2026, 10, 24, 9), timed: true, category: "health")
+        expect("Gym tomorrow morning", title: "Gym", due: date(2026, 10, 24, 9), timed: true, category: "inbox")
         expect("Email Tom about the venue #wedding", title: "Email Tom about the venue", due: nil, timed: false, tags: ["Wedding", "Tom"])
         expect("Text Sarah at 7 tonight", title: "Text Sarah", due: date(2026, 10, 23, 19), timed: true, tags: ["Sarah"])
-        expect("Pick up dry cleaning this afternoon", title: "Pick up dry cleaning", due: date(2026, 10, 23, 14), timed: true, category: "errands")
+        expect("Pick up dry cleaning this afternoon", title: "Pick up dry cleaning", due: date(2026, 10, 23, 14), timed: true, category: "inbox")
         expect("Call Mum at 10", title: "Call Mum", due: date(2026, 10, 24, 10), timed: true)
         expect("Renew passport by 5 November", title: "Renew passport", due: date(2026, 11, 5), timed: false)
         expect("Finish the model by Thursday evening", title: "Finish the model", due: date(2026, 10, 29, 18), timed: true)
         expect("Reply to Ana ASAP", title: "Reply to Ana", due: date(2026, 10, 23), timed: false, tags: ["Ana"])
+        // Lists only when Ian says so.
+        expect("Book flights for work tomorrow", title: "Book flights", due: date(2026, 10, 24), timed: false, category: "work")
+        expect("Call the bank, money", title: "Call the bank", due: nil, timed: false, category: "money")
+        expect("Send memo hashtag work", title: "Send memo", due: nil, timed: false, category: "work")
+        expect("Buy milk on my errands list", title: "Buy milk", due: nil, timed: false, category: "errands")
+        expect("Irina on security deposit", title: "Irina on security deposit", due: nil, timed: false, category: "inbox")
+        var keyed = cats
+        if let index = keyed.firstIndex(where: { $0.id == "health" }) { keyed[index].hint = "gym, physio" }
+        check("list keywords Ian set", QuickParse.item(from: "Gym tomorrow morning", categories: keyed, now: now)?.categoryID == "health")
+        let reading = QuickParse.read("Respond to John TN #work", categories: cats, now: now)
+        check("live preview knows what it read", reading?.whenPhrases.first?.lowercased() == "tonight"
+              && reading?.listPhrases == ["#work"] && reading?.filed == true, "\(String(describing: reading?.whenPhrases))")
+        var old = AgendaData()
+        old.categories = Array(Category.defaults.dropFirst())
+        old.categories[0].hint = "job, office, colleagues, clients, deals, meetings, emails to send for work"
+        check("older lists get Unsorted and lose topic hints", old.upgrade() && old.categories.first?.isInbox == true
+              && old.categories[1].hint.isEmpty)
         check("next Friday is a week on", QuickParse.weekday(6, prefix: "next", nextWeek: false,
               today: date(2026, 10, 27), calendar: calendar) == date(2026, 11, 6))
         check("shorthand expands", QuickParse.expandShorthand("ring dad tn at 5 p.m.") == "ring dad tonight at 5pm",
@@ -108,7 +126,7 @@ enum SelfTest {
                 check("repeat becomes standing reminder", proposals[2].repeats == .monthly(day: 1, hour: 9, minute: 0))
                 let routine = proposals[2].makeRoutine(now: now)
                 check("standing reminder starts 1 Nov", routine?.nextDue == date(2026, 11, 1, 9), "\(String(describing: routine?.nextDue))")
-                check("unknown list falls back to Personal", proposals[3].item.categoryID == "personal")
+                check("unknown list falls back to Unsorted", proposals[3].item.categoryID == "inbox")
                 check("time with no day is today", proposals[3].item.due == date(2026, 10, 23, 16) && proposals[3].item.flagged)
                 check("tags tidied", proposals[1].item.tagList == ["Sam"], "\(proposals[1].item.tagList)")
                 let hotel = proposals[4].item
@@ -123,6 +141,14 @@ enum SelfTest {
             tagged.add([item])
             return tagged.search("#john").count == 1 && tagged.tags.first?.name == "John" && tagged.items(tagged: "john").count == 1
         }())
+        if let decoded {
+            let guessed = Sorter.proposals(from: decoded, categories: cats, source: .voice, now: now,
+                                           said: "Book the dentist and ring the bank")
+            check("AI's topic guesses go to Unsorted", guessed.first?.item.categoryID == "inbox")
+            let named = Sorter.proposals(from: decoded, categories: cats, source: .voice, now: now,
+                                         said: "Book the dentist, health list")
+            check("a list Ian named is kept", named.first?.item.categoryID == "health")
+        }
         check("schema is valid JSON", JSONSerialization.isValidJSONObject(Sorter.schema))
         let prompt = Sorter.instructions(categories: cats, now: now, shared: true)
         check("instructions carry today's date", prompt.contains("2026-10-23") && prompt.contains("money"))

@@ -48,7 +48,7 @@ struct RootView: View {
             case .settings:
                 SettingsView()
             case .newItem:
-                ItemEditor(item: Item(title: "", categoryID: "personal"), isNew: true)
+                ItemEditor(item: Item(title: "", categoryID: Category.inboxID), isNew: true)
             case .item(let id):
                 if let item = AgendaStore.shared.item(id) {
                     ItemEditor(item: item, isNew: false)

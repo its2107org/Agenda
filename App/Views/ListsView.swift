@@ -257,13 +257,14 @@ struct SectionsEditor: View {
                                 Text(category.name).foregroundStyle(.primary)
                             }
                         }
+                        .deleteDisabled(category.isInbox)
                     }
                     .onMove { store.moveCategories(from: $0, to: $1) }
                     .onDelete { offsets in
                         for index in offsets { store.deleteCategory(store.categories[index].id) }
                     }
                 } footer: {
-                    Text("Drag to reorder. Removing a list moves its to-dos to Personal.")
+                    Text("Drag to reorder. Removing a list moves its to-dos to Unsorted.")
                 }
                 Section {
                     Button("New list", systemImage: "plus") {
@@ -338,12 +339,14 @@ struct CategoryEditor: View {
                     }
                     .padding(.vertical, 6)
                 }
-                Section {
-                    TextField("e.g. gym, runs, physio", text: $category.hint, axis: .vertical)
-                } header: {
-                    Text("What goes here")
-                } footer: {
-                    Text("A few words to help Agenda sort brain dumps into this list.")
+                if !category.isInbox {
+                    Section {
+                        TextField("e.g. gym, physio", text: $category.hint, axis: .vertical)
+                    } header: {
+                        Text("Keywords")
+                    } footer: {
+                        Text("Say or type the list's name (\"\(category.name.isEmpty ? "work" : category.name.lowercased()) list\", #\(category.name.isEmpty ? "work" : category.name.lowercased().filter { $0.isLetter })) to file a to-do here. Add other words, separated by commas, that should file it here too. Anything else goes in Unsorted.")
+                    }
                 }
             }
             .navigationTitle(category.id.isEmpty ? "New list" : "Edit list")

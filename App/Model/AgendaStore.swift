@@ -52,8 +52,10 @@ final class AgendaStore {
     }
 
     private static func loadFromDisk() -> AgendaData? {
-        guard let raw = try? Data(contentsOf: fileURL) else { return nil }
-        return try? JSONDecoder().decode(AgendaData.self, from: raw)
+        guard let raw = try? Data(contentsOf: fileURL),
+              var data = try? JSONDecoder().decode(AgendaData.self, from: raw) else { return nil }
+        _ = data.upgrade()
+        return data
     }
 
     /// Re-reads the file, but only if something other than this copy of Agenda changed it.
@@ -96,8 +98,8 @@ final class AgendaStore {
     var categories: [Category] { data.categories }
 
     func category(_ id: String) -> Category {
-        data.categories.first { $0.id == id } ?? data.categories.first { $0.id == "personal" }
-            ?? data.categories.first ?? Category.defaults[6]
+        data.categories.first { $0.id == id } ?? data.categories.first(where: \.isInbox)
+            ?? data.categories.first ?? Category.inbox
     }
 
     func upsertCategory(_ category: Category) {
@@ -110,9 +112,9 @@ final class AgendaStore {
     }
 
     func deleteCategory(_ id: String) {
-        guard data.categories.count > 1 else { return }
+        guard data.categories.count > 1, id != Category.inboxID else { return }
         data.categories.removeAll { $0.id == id }
-        let fallback = category("personal").id
+        let fallback = category(Category.inboxID).id
         for index in data.items.indices where data.items[index].categoryID == id {
             data.items[index].categoryID = fallback
         }
