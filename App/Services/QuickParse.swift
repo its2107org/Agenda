@@ -84,11 +84,14 @@ enum QuickParse {
         text.enumerateSubstrings(in: text.startIndex..., options: .bySentences) { sentence, _, _, _ in
             if let sentence { pieces.append(sentence) }
         }
-        let separators = [" and also ", " also ", " and then ", "\n", ";"]
+        let separators = [" and also ", ", oh and ", ", and ", " also ", " and then ", "\n", ";"]
         for separator in separators {
             pieces = pieces.flatMap { $0.components(separatedBy: separator) }
         }
-        return pieces.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        // Words like "Okay so" and "oh" at the start aren't part of the to-do.
+        return pieces.map { $0.replacingOccurrences(of: #"^(?i)\s*(?:okay|ok|so|um|uh|oh|and|also)\b[\s,]*(?:(?:so|um|oh|and)\b[\s,]*)*"#,
+                                                    with: "", options: .regularExpression) }
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
     // MARK: - Shorthand
@@ -396,7 +399,7 @@ enum QuickParse {
                 let n = NSRegularExpression.escapedPattern(for: name)
                 let patterns = [
                     #"(?i)\s*,?\s*\b(?:(?:add|put|file|save)\s+(?:it\s+)?)?(?:(?:on|to|in|into|onto|under)\s+)?(?:the\s+|my\s+)?"# + n + #"\s+list\b"#,
-                    #"(?i)\s*,?\s*\b(?:(?:add|put|file|save)\s+(?:it\s+)?)?(?:for|under|in|into)\s+(?:the\s+|my\s+)?"# + n + #"[\s,.;:!]*$"#,
+                    #"(?i)\s*,?\s*\b(?:(?:add|put|file|save)\s+(?:it\s+)?)?(?:for|under|in|into)\s+(?:the\s+|my\s+)?"# + n + #"(?=\s*(?:[,;:.!]|$))"#,
                     #"(?i)[,;:–—-]\s*"# + n + #"[\s.!]*$"#
                 ]
                 for pattern in patterns {

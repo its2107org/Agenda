@@ -19,7 +19,7 @@ struct ListsView: View {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                         SmartCard(title: "Slipped", symbol: "exclamationmark.circle.fill", tint: .red,
                                   count: store.overdue().count, destination: .slipped)
-                        SmartCard(title: "Anytime", symbol: "tray.fill", tint: .gray,
+                        SmartCard(title: "Anytime", symbol: "infinity", tint: .gray,
                                   count: store.anytime.count, destination: .anytime)
                         SmartCard(title: "Important", symbol: "flag.fill", tint: .orange,
                                   count: store.flagged.count, destination: .flagged)

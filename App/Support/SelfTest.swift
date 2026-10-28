@@ -97,6 +97,10 @@ enum SelfTest {
         old.categories[0].hint = "job, office, colleagues, clients, deals, meetings, emails to send for work"
         check("older lists get Unsorted and lose topic hints", old.upgrade() && old.categories.first?.isInbox == true
               && old.categories[1].hint.isEmpty)
+        let rambled = QuickParse.pieces(of: Demo.dumpText).compactMap { QuickParse.read($0, categories: cats, now: now) }
+        check("live preview splits a ramble", rambled.count >= 6 && rambled.first?.item.categoryID == "work"
+              && rambled.first?.item.title.hasPrefix("Send the Q3 memo") == true,
+              rambled.map { "\($0.item.title) [\($0.item.categoryID)]" }.joined(separator: " | "))
         check("next Friday is a week on", QuickParse.weekday(6, prefix: "next", nextWeek: false,
               today: date(2026, 10, 27), calendar: calendar) == date(2026, 11, 6))
         check("shorthand expands", QuickParse.expandShorthand("ring dad tn at 5 p.m.") == "ring dad tonight at 5pm",

@@ -92,6 +92,7 @@ struct BrainDumpView: View {
                     .animation(.snappy(duration: 0.25), value: readings.count)
                     Color.clear.frame(height: 1).id("end")
                 }
+                .defaultScrollAnchor(.bottom)
                 .onChange(of: text) { proxy.scrollTo("end", anchor: .bottom) }
             }
             .frame(maxHeight: .infinity)

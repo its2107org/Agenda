@@ -193,7 +193,10 @@ struct Chip: View {
     let tint: Color
 
     var body: some View {
-        Label(text, systemImage: symbol)
+        HStack(spacing: 4) {
+            Image(systemName: symbol).imageScale(.small)
+            Text(text)
+        }
             .font(.caption.weight(.medium))
             .lineLimit(1)
             .foregroundStyle(tint == .secondary ? Color.secondary : tint)
