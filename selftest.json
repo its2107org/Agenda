@@ -1,0 +1,370 @@
+{
+  "checks" : [
+    {
+      "check" : "3½ days after Sun 8am is Wed 8pm",
+      "detail" : "2026-10-28 20:00:00 +0000",
+      "ok" : true
+    },
+    {
+      "check" : "keeps the rhythm when late",
+      "detail" : "2026-11-04 20:00:00 +0000",
+      "ok" : true
+    },
+    {
+      "check" : "31st becomes the last day of February",
+      "detail" : "2027-02-28 09:00:00 +0000",
+      "ok" : true
+    },
+    {
+      "check" : "rent next due 1 November",
+      "detail" : "2026-11-01 09:00:00 +0000",
+      "ok" : true
+    },
+    {
+      "check" : "weekly Mon\/Thu after Friday is Monday",
+      "detail" : "2026-10-26 09:00:00 +0000",
+      "ok" : true
+    },
+    {
+      "check" : "calendar shows 4 doses in two weeks",
+      "detail" : "4",
+      "ok" : true
+    },
+    {
+      "check" : "summary reads well",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "quick add title",
+      "detail" : "Call Sam",
+      "ok" : true
+    },
+    {
+      "check" : "quick add time",
+      "detail" : "Optional(2026-10-24 15:00:00 +0000)",
+      "ok" : true
+    },
+    {
+      "check" : "quick add drops 'I need to', stays Unsorted",
+      "detail" : "Pay the rent inbox",
+      "ok" : true
+    },
+    {
+      "check" : "quick add with no date",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "no guessing from the topic",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "simple split without AI",
+      "detail" : "Buy milk | Call the bank | Clean the kitchen",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Respond to John TN\"",
+      "detail" : "Respond to John | 2026-10-23 19:00:00 +0000 | timed true | inbox | [\"John\"]",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"respond next Monday at 5 p.m.\"",
+      "detail" : "Respond | 2026-10-26 17:00:00 +0000 | timed true | inbox | []",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Call the bank tmrw 9am #money\"",
+      "detail" : "Call the bank | 2026-10-24 09:00:00 +0000 | timed true | money | []",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Dinner with Hannah Fri 8pm\"",
+      "detail" : "Dinner with Hannah | 2026-10-30 20:00:00 +0000 | timed true | inbox | [\"Hannah\"]",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Send deck EOD\"",
+      "detail" : "Send deck | 2026-10-23 17:00:00 +0000 | timed true | inbox | []",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Pay rent in 3 days\"",
+      "detail" : "Pay rent | 2026-10-26 00:00:00 +0000 | timed false | inbox | []",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Book flights next week\"",
+      "detail" : "Book flights | 2026-10-26 00:00:00 +0000 | timed false | inbox | []",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Gym tomorrow morning\"",
+      "detail" : "Gym | 2026-10-24 09:00:00 +0000 | timed true | inbox | []",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Email Tom about the venue #wedding\"",
+      "detail" : "Email Tom about the venue | no date | timed false | inbox | [\"Wedding\", \"Tom\"]",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Text Sarah at 7 tonight\"",
+      "detail" : "Text Sarah | 2026-10-23 19:00:00 +0000 | timed true | inbox | [\"Sarah\"]",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Pick up dry cleaning this afternoon\"",
+      "detail" : "Pick up dry cleaning | 2026-10-23 14:00:00 +0000 | timed true | inbox | []",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Call Mum at 10\"",
+      "detail" : "Call Mum | 2026-10-24 10:00:00 +0000 | timed true | inbox | [\"Mum\"]",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Renew passport by 5 November\"",
+      "detail" : "Renew passport | 2026-11-05 00:00:00 +0000 | timed false | inbox | []",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Finish the model by Thursday evening\"",
+      "detail" : "Finish the model | 2026-10-29 18:00:00 +0000 | timed true | inbox | []",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Reply to Ana ASAP\"",
+      "detail" : "Reply to Ana | 2026-10-23 00:00:00 +0000 | timed false | inbox | [\"Ana\"]",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Book flights for work tomorrow\"",
+      "detail" : "Book flights | 2026-10-24 00:00:00 +0000 | timed false | work | []",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Call the bank, money\"",
+      "detail" : "Call the bank | no date | timed false | money | []",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Send memo hashtag work\"",
+      "detail" : "Send memo | no date | timed false | work | []",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Buy milk on my errands list\"",
+      "detail" : "Buy milk | no date | timed false | errands | []",
+      "ok" : true
+    },
+    {
+      "check" : "reads \"Irina on security deposit\"",
+      "detail" : "Irina on security deposit | no date | timed false | inbox | []",
+      "ok" : true
+    },
+    {
+      "check" : "list keywords Ian set",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "live preview knows what it read",
+      "detail" : "Optional([\"tonight\"])",
+      "ok" : true
+    },
+    {
+      "check" : "older lists get Unsorted and lose topic hints",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "live preview splits a ramble",
+      "detail" : "Send the Q3 memo to Tom [work] | Book a table somewhere for Sam's birthday [inbox] | Pick up the dry cleaning [inbox] | The bathroom tap is still dripping so call the super [home] | Pay rent on the first of every month [inbox] | Really renew my passport, that's urgent [inbox]",
+      "ok" : true
+    },
+    {
+      "check" : "next Friday is a week on",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "shorthand expands",
+      "detail" : "ring dad tonight at 5pm",
+      "ok" : true
+    },
+    {
+      "check" : "sorter answer decodes",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "blank entries dropped",
+      "detail" : "5",
+      "ok" : true
+    },
+    {
+      "check" : "date-only to-do",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "booking start and end",
+      "detail" : "Optional(2026-10-30 21:30:00 +0000)",
+      "ok" : true
+    },
+    {
+      "check" : "repeat becomes standing reminder",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "standing reminder starts 1 Nov",
+      "detail" : "Optional(2026-11-01 09:00:00 +0000)",
+      "ok" : true
+    },
+    {
+      "check" : "unknown list falls back to Unsorted",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "time with no day is today",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "tags tidied",
+      "detail" : "[\"Sam\"]",
+      "ok" : true
+    },
+    {
+      "check" : "multi-day booking",
+      "detail" : "Optional(2026-11-07 00:00:00 +0000)",
+      "ok" : true
+    },
+    {
+      "check" : "search finds tags",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "AI's topic guesses go to Unsorted",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "a list Ian named is kept",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "schema is valid JSON",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "instructions carry today's date",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "demo dump sorts",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "slipped list",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "anytime list",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "move to tomorrow",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "tick off",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "dose logged and next one set",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "injection spot rotates",
+      "detail" : "Tummy (right)",
+      "ok" : true
+    },
+    {
+      "check" : "pen count goes down",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "nudges within the limit",
+      "detail" : "60",
+      "ok" : true
+    },
+    {
+      "check" : "standing reminder nudges kept",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "unique nudge ids",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "same plan, same fingerprint (no needless rescheduling)",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "speech knows Ian's words",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "morning round-up written",
+      "detail" : "Today: 39 things · 42 slipped",
+      "ok" : true
+    },
+    {
+      "check" : "widget data round trip",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "everything saves and loads",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "shared item round trip",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "when: today with time",
+      "detail" : "",
+      "ok" : true
+    },
+    {
+      "check" : "ordinals",
+      "detail" : "",
+      "ok" : true
+    }
+  ],
+  "result" : "all passed"
+}
