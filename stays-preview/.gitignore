@@ -1,0 +1,16 @@
+Stays.xcodeproj/
+build/
+shots/
+buildlog/
+*.ipa
+*.dSYM.zip
+*.mobileprovision
+.DS_Store
+fastlane/report.xml
+fastlane/README.md
+vendor/
+.bundle/
+App/Info.plist
+Widget/Info.plist
+App/Stays.entitlements
+Widget/StaysWidget.entitlements

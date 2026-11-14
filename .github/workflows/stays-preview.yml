@@ -1,0 +1,32 @@
+name: Stays preview check (temporary)
+on:
+  push:
+    branches: ["claude/project-thread-9e0f4q"]
+    paths: ["stays-preview/**", ".github/workflows/stays-preview.yml"]
+concurrency:
+  group: stays-preview
+  cancel-in-progress: true
+jobs:
+  sim:
+    runs-on: macos-26
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: stays-preview
+    steps:
+      - uses: actions/checkout@v5
+      - run: sudo xcode-select --switch /Applications/Xcode_26.5.app/Contents/Developer
+      - run: brew install xcodegen && xcodegen generate
+      - name: Build, run and screenshot
+        run: |
+          set -o pipefail
+          scripts/simulator-check.sh || { echo "::error::check failed"; grep -E "error:" build.log | sort -u | head -60 | while read -r l; do echo "::error::$l"; done; exit 1; }
+      - name: Publish screenshots
+        if: always()
+        run: |
+          [ -d shots ] || exit 0
+          git config user.name "stays-ci"; git config user.email "stays-ci@users.noreply.github.com"
+          rm -rf /tmp/shots && cp -R shots /tmp/shots
+          cd .. && git checkout --orphan stays-shots-tmp && git rm -rf --quiet . && git clean -fdxq
+          cp -R /tmp/shots/* . && git add -A && git commit -qm "Stays screenshots" && git push -f origin HEAD:stays-preview-shots

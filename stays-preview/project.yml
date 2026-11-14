@@ -1,0 +1,101 @@
+name: Stays
+options:
+  deploymentTarget:
+    iOS: "26.1"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    # Replaced with the real Apple Team ID when building for TestFlight.
+    DEVELOPMENT_TEAM: STAYSDEV00
+    STAYS_BUNDLE_ID: com.$(DEVELOPMENT_TEAM).stays
+    STAYS_KEYCHAIN_GROUP: $(AppIdentifierPrefix)com.$(DEVELOPMENT_TEAM).stays.shared
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGN_STYLE: Manual
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+targets:
+  Stays:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Shared/Core
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Stays
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
+        LSApplicationCategoryType: public.app-category.travel
+        StaysKeychainGroup: $(STAYS_KEYCHAIN_GROUP)
+        NSLocationWhenInUseUsageDescription: Stays uses your location to suggest hotels near you when you add one.
+        NSPhotoLibraryUsageDescription: Stays lets you add your own photos of a hotel.
+        UISupportsDocumentBrowser: false
+        LSSupportsOpeningDocumentsInPlace: true
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        CFBundleURLTypes:
+          - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
+            CFBundleURLSchemes:
+              - stays
+    entitlements:
+      path: App/Stays.entitlements
+      properties:
+        keychain-access-groups:
+          - $(STAYS_KEYCHAIN_GROUP)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(STAYS_BUNDLE_ID)
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) STAYS_APP
+    dependencies:
+      - target: StaysWidget
+        embed: true
+        codeSign: true
+
+  StaysWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widget
+      - path: Shared/Core
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Stays
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        StaysKeychainGroup: $(STAYS_KEYCHAIN_GROUP)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Widget/StaysWidget.entitlements
+      properties:
+        keychain-access-groups:
+          - $(STAYS_KEYCHAIN_GROUP)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(STAYS_BUNDLE_ID).Widget
+        APPLICATION_EXTENSION_API_ONLY: YES
+
+schemes:
+  Stays:
+    build:
+      targets:
+        Stays: all
+    run:
+      config: Debug
+    archive:
+      config: Release
