@@ -13,15 +13,29 @@ enum SelfTest {
     private static func check(_ name: String, _ ok: Bool, _ detail: String = "") {
         results.append(["check": name, "ok": ok, "detail": detail])
         if !ok { failures += 1 }
+        progress("\(ok ? "ok" : "FAILED"): \(name) \(detail)")
     }
 
     private static func info(_ name: String, _ detail: String) {
         results.append(["check": name, "info": detail])
+        progress("info: \(name) \(detail)")
+    }
+
+    /// A running log, so a hang or crash on the build computer shows where it stopped.
+    private static func progress(_ line: String) {
+        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("selftest-progress.txt")
+        let text = "\(Date().formatted(.iso8601)) \(line)\n"
+        if let h = try? FileHandle(forWritingTo: url) {
+            h.seekToEndOfFile(); h.write(Data(text.utf8)); try? h.close()
+        } else {
+            try? text.write(to: url, atomically: true, encoding: .utf8)
+        }
     }
 
     static func runIfRequested() async -> Bool {
         guard isRequested else { return false }
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        progress("started")
 
         // Scores
         check("overall of 5,4,3 is 8.0", Score.overall(["room": 5, "sleep": 4, "value": 3]) == 8.0)
@@ -72,6 +86,7 @@ enum SelfTest {
         }
         check("placeholder name", Library.placeholderTarget(".abc.json.icloud") == "abc.json" && Library.placeholderTarget("abc.json") == nil)
 
+        progress("store checks next")
         // The store, end to end (in a scratch folder)
         let store = StaysStore.shared
         let storeLib = Library(root: tmp.appendingPathComponent("store"), isShared: false)
@@ -107,6 +122,7 @@ enum SelfTest {
         check("name words", PhotoFinder.significantWords("The Savoy") == ["savoy"] && PhotoFinder.significantWords("Hôtel du Cap-Eden-Roc") == ["cap", "eden", "roc"])
         check("name matching", PhotoFinder.matchesName("File:The Savoy Hotel, Strand.jpg", ["savoy"]) && !PhotoFinder.matchesName("Strand", ["savoy"]))
 
+        progress("online photo search next")
         // Real photo search, online
         let savoy = Hotel(name: "The Savoy", city: "London", latitude: 51.5104, longitude: -0.1205,
                           website: URL(string: "https://www.thesavoylondon.com"), addedBy: a)
@@ -126,8 +142,9 @@ enum SelfTest {
         info("Ritz photos", "\(Dictionary(grouping: ritz, by: \.source).mapValues(\.count))")
 
         // Apple Maps search (the build computer may not reach it, so this is information only)
+        progress("maps search next")
         do {
-            let items = try await HotelSearch.search("The Savoy London")
+            let items = try await withTimeout(20) { try await HotelSearch.search("The Savoy London") }
             let first = items.first.map { HotelSearch.draft(from: $0, by: a) }
             info("Maps search", "\(items.count) results; first: \(first?.name ?? "-"), \(first?.city ?? "-"), site \(first?.website?.absoluteString ?? "-")")
             if let first {
@@ -138,13 +155,26 @@ enum SelfTest {
             info("Maps search", "failed: \(error.localizedDescription)")
         }
 
-        // Write the report
+        writeReport(docs)
+        try? FileManager.default.removeItem(at: tmp)
+        return true
+    }
+
+    static func withTimeout<T: Sendable>(_ seconds: Double, _ work: @escaping @Sendable () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await work() }
+            group.addTask { try await Task.sleep(for: .seconds(seconds)); throw URLError(.timedOut) }
+            let first = try await group.next()!
+            group.cancelAll()
+            return first
+        }
+    }
+
+    private static func writeReport(_ docs: URL) {
         let summary = failures == 0 ? "all passed" : "\(failures) failed"
         let report: [String: Any] = ["summary": summary, "results": results]
         if let data = try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: docs.appendingPathComponent("selftest.json"))
         }
-        try? FileManager.default.removeItem(at: tmp)
-        return true
     }
 }

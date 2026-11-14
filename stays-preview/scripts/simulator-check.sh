@@ -26,7 +26,7 @@ mkdir -p shots
 
 # 1. Self-check (includes looking for real hotel photos online).
 xcrun simctl launch --terminate-running-process "$UDID" "$BID" -StaysSelfTest
-for i in $(seq 1 90); do
+for i in $(seq 1 150); do
   DATA=$(xcrun simctl get_app_container "$UDID" "$BID" data)
   [ -f "$DATA/Documents/selftest.json" ] && break
   sleep 2
@@ -38,6 +38,9 @@ if [ -f "$DATA/Documents/selftest.json" ]; then
   grep -q '"all passed"' shots/selftest.json || { echo "::error::Self-check failed"; exit 1; }
 else
   echo "::error::Self-check produced no result"
+  DATA=$(xcrun simctl get_app_container "$UDID" "$BID" data)
+  while read -r l; do echo "::error::progress: $l"; done < <(tail -20 "$DATA/Documents/selftest-progress.txt" 2>/dev/null || echo none)
+  for f in $(ls -t ~/Library/Logs/DiagnosticReports/Stays* 2>/dev/null | head -1); do head -c 3000 "$f" | grep -E "Exception|Termination|Crashed|^[0-9]+ +Stays" | head -20 | while read -r l; do echo "::error::crash: $l"; done; done
   exit 1
 fi
 xcrun simctl terminate "$UDID" "$BID" || true
